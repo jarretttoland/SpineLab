@@ -1,0 +1,56 @@
+{
+  "name": "PostureScan",
+  "type": "object",
+  "properties": {
+    "image_url": {
+      "type": "string",
+      "description": "URL of the uploaded posture scan image"
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Detected posture findings with severity and confidence"
+    },
+    "landmarks_detected": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Landmarks successfully identified"
+    },
+    "landmark_positions": {
+      "type": "object",
+      "description": "Normalized (0\u20131) landmark positions: { ear, shoulder, hip, knee, ankle }"
+    },
+    "quality_score": {
+      "type": "number",
+      "description": "Posture quality score 50\u2013100"
+    },
+    "scan_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of scan"
+    },
+    "notes": {
+      "type": "string",
+      "description": "AI-generated summary notes"
+    }
+  },
+  "required": [
+    "image_url",
+    "scan_date"
+  ]
+}

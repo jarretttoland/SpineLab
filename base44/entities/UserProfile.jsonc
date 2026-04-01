@@ -1,0 +1,135 @@
+{
+  "name": "UserProfile",
+  "type": "object",
+  "properties": {
+    "first_name": {
+      "type": "string"
+    },
+    "last_name": {
+      "type": "string"
+    },
+    "pain_areas": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "All selected pain areas: neck, mid_back, low_back, radiating"
+    },
+    "primary_pain": {
+      "type": "string",
+      "enum": [
+        "neck",
+        "mid_back",
+        "low_back",
+        "radiating"
+      ],
+      "description": "Primary (tiebreaker) pain location"
+    },
+    "secondary_pain": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Secondary pain areas"
+    },
+    "primary_goal": {
+      "type": "string",
+      "enum": [
+        "pain_relief",
+        "better_posture",
+        "performance"
+      ],
+      "description": "Primary goal (tiebreaker)"
+    },
+    "secondary_goals": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Additional selected goals"
+    },
+    "sitting_hours": {
+      "type": "number"
+    },
+    "works_out": {
+      "type": "boolean"
+    },
+    "spine_score": {
+      "type": "number",
+      "description": "Spine Score 0-100"
+    },
+    "onboarding_complete": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_pro": {
+      "type": "boolean",
+      "default": false
+    },
+    "current_streak": {
+      "type": "number",
+      "default": 0
+    },
+    "longest_streak": {
+      "type": "number",
+      "default": 0
+    },
+    "scan_results": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Posture findings: forward_head, rounded_shoulders, anterior_pelvic_tilt"
+    },
+    "scan_image_url": {
+      "type": "string"
+    },
+    "movement_response": {
+      "type": "string",
+      "enum": [
+        "worse",
+        "better",
+        "stiff_then_better"
+      ],
+      "description": "How pain responds to movement"
+    },
+    "activity_level": {
+      "type": "string",
+      "enum": [
+        "sedentary",
+        "moderate",
+        "very_active"
+      ]
+    },
+    "age_range": {
+      "type": "string",
+      "enum": [
+        "under25",
+        "25to40",
+        "40to55",
+        "55plus"
+      ]
+    },
+    "goal": {
+      "type": "string",
+      "enum": [
+        "pain_relief",
+        "better_posture",
+        "performance"
+      ],
+      "description": "Legacy / primary goal alias"
+    },
+    "archetype": {
+      "type": "string",
+      "enum": [
+        "nerve",
+        "global",
+        "irritable",
+        "sedentary",
+        "deconditioned",
+        "active"
+      ]
+    }
+  },
+  "required": []
+}
