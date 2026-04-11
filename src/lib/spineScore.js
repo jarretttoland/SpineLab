@@ -1,180 +1,301 @@
 /**
- * SpineLab — Personalized Spine Score & Archetype Engine
+ * SpineLab — Scoring + Archetype Engine
+ *
+ * New architecture:
+ * - Structural Score: slow-moving baseline from questionnaire + scan updates
+ * - Consistency Score: fast-moving score from daily routine adherence
+ * - Final Spine Score: blended score shown to the user
  */
 
-// Archetype definitions
+// ── Archetypes ────────────────────────────────────────────────────────────────
 export const ARCHETYPES = {
   nerve: {
     label: "Nerve Irritation Pattern",
     description:
-      "Your symptoms suggest nerve involvement — pain or sensations travelling into an arm or leg. This often points to irritation of a spinal nerve root. Your plan will focus on gentle decompression, nerve mobility, and avoiding provocative positions.",
-    focus: ["Nerve mobility exercises", "Spinal decompression", "Posture correction to reduce nerve load", "Gradual return to movement"],
+      "Your symptoms suggest nerve involvement — pain or sensations travelling into an arm or leg. Your plan will focus on decompression, nerve mobility, and avoiding provocative positions.",
+    focus: [
+      "Nerve mobility exercises",
+      "Spinal decompression",
+      "Posture correction to reduce nerve load",
+      "Gradual return to movement",
+    ],
   },
   global: {
     label: "Global Spine Dysfunction",
     description:
-      "You have pain or tension across multiple spinal regions. This points to whole-chain dysfunction — likely involving the neck, thoracic spine, hips, and core together. Your plan will address the full kinetic chain rather than isolated areas.",
-    focus: ["Full-chain mobility (neck to hips)", "Thoracic extension and rotation", "Deep core activation", "Integrated movement patterns"],
+      "You have pain or tension across multiple spinal regions. Your plan will address the full kinetic chain rather than isolated areas.",
+    focus: [
+      "Full-chain mobility (neck to hips)",
+      "Thoracic extension and rotation",
+      "Deep core activation",
+      "Integrated movement patterns",
+    ],
   },
   irritable: {
     label: "Irritable / Pain Sensitive",
     description:
-      "Your spine appears to be in an irritable state — movement currently aggravates your symptoms. This is common after injury or prolonged strain. Your plan will start gently, reduce provocation, and gradually restore movement tolerance.",
-    focus: ["Pain-safe movement patterns", "Breathing and nervous system regulation", "Progressive loading", "Reduce daily aggravators"],
+      "Your spine appears to be in an irritable state. Your plan will start gently, reduce provocation, and gradually restore movement tolerance.",
+    focus: [
+      "Pain-safe movement patterns",
+      "Breathing and nervous system regulation",
+      "Progressive loading",
+      "Reduce daily aggravators",
+    ],
   },
   sedentary: {
     label: "Tight & Sedentary",
     description:
-      "Long hours of sitting have created stiffness and tightness across your hips, thoracic spine, and posterior chain. Movement helps you — you just need the right movements done consistently.",
-    focus: ["Hip flexor and thoracic mobility", "Posture reset from desk habits", "Core activation", "Movement snacks throughout the day"],
+      "Long hours of sitting have likely created stiffness and tightness. Your plan will focus on mobility, posture reset, and consistent movement.",
+    focus: [
+      "Hip flexor and thoracic mobility",
+      "Posture reset from desk habits",
+      "Core activation",
+      "Movement snacks throughout the day",
+    ],
   },
   deconditioned: {
     label: "Deconditioned",
     description:
-      "Your spine lacks the muscular support it needs to handle daily demands. Building foundational strength and movement control is your top priority before adding load or intensity.",
-    focus: ["Foundation strength and stability", "Safe movement patterns", "Build daily activity habits", "Progressive loading over time"],
+      "Your spine likely lacks the muscular support it needs to handle daily demands. Your plan will focus on foundational strength and movement control.",
+    focus: [
+      "Foundation strength and stability",
+      "Safe movement patterns",
+      "Build daily activity habits",
+      "Progressive loading over time",
+    ],
   },
   active: {
     label: "Active but Dysfunctional",
     description:
-      "You're already active, but something in your movement patterns or structural alignment is causing pain or dysfunction. Your plan will address the gaps in mobility and motor control holding you back.",
-    focus: ["Movement quality over quantity", "Targeted mobility work", "Spinal control under load", "Identify and address compensation patterns"],
+      "You're already active, but movement quality or alignment issues may be holding you back. Your plan will focus on control, mobility, and cleaner mechanics.",
+    focus: [
+      "Movement quality over quantity",
+      "Targeted mobility work",
+      "Spinal control under load",
+      "Identify and address compensation patterns",
+    ],
   },
 };
 
-/**
- * Classify user into an archetype based on their answers.
- * Supports primaryPain (string) and painAreas (array) for multi-select.
- */
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function normalizePostureFindings(postureFindings = []) {
+  if (!Array.isArray(postureFindings)) return [];
+
+  return postureFindings.map((item) => {
+    if (typeof item === "string") return item;
+    if (typeof item === "object" && item?.id) return item.id;
+    if (typeof item === "object" && item?.label) return item.label;
+    return "";
+  });
+}
+
+// ── Archetype classification ─────────────────────────────────────────────────
 export function classifyArchetype(answers) {
-  const { primaryPain, problemArea, painAreas, movementResponse, sittingHours, activityLevel } = answers;
+  const {
+    primaryPain,
+    problemArea,
+    painAreas,
+    movementResponse,
+    sittingHours,
+    activityLevel,
+  } = answers || {};
 
-  // Resolve primary pain — supports both old (problemArea) and new (primaryPain) field names
-  const primary = primaryPain || problemArea;
-  const allAreas = painAreas || (primary ? [primary] : []);
+  const primary = primaryPain || problemArea || null;
+  const allAreas = Array.isArray(painAreas)
+    ? painAreas
+    : primary
+    ? [primary]
+    : [];
 
-  // Rule 1: Radiating pain anywhere → nerve
   if (primary === "radiating" || allAreas.includes("radiating")) return "nerve";
 
-  // Rule 2: Multiple distinct regions (not just radiating) → global
   const nonRadiating = allAreas.filter((a) => a !== "radiating");
   if (nonRadiating.length > 1) return "global";
 
-  // Standard single-area rules
   if (movementResponse === "worse") return "irritable";
   if (activityLevel === "very_active") return "active";
-  if (activityLevel === "sedentary" && (sittingHours === "6plus" || sittingHours === "3to6")) return "sedentary";
+  if (
+    activityLevel === "sedentary" &&
+    (sittingHours === "6plus" || sittingHours === "3to6")
+  ) {
+    return "sedentary";
+  }
   if (activityLevel === "sedentary") return "deconditioned";
   if (sittingHours === "6plus") return "sedentary";
+
   return "deconditioned";
 }
 
-/**
- * Calculate overall spine score out of 100.
- * Supports primaryPain + secondaryPain (multi-select) or legacy problemArea.
- */
-export function calculateSpineScore(answers, postureFindings = []) {
-  const { primaryPain, problemArea, secondaryPain = [], movementResponse, sittingHours, activityLevel, ageRange } = answers;
+// ── Structural baseline from questionnaire ───────────────────────────────────
+export function calculateStructuralBaseline(answers, postureFindings = []) {
+  const {
+    primaryPain,
+    problemArea,
+    secondaryPain = [],
+    movementResponse,
+    sittingHours,
+    activityLevel,
+    ageRange,
+  } = answers || {};
 
-  const primary = primaryPain || problemArea;
-  let score = 72; // baseline
+  const normalizedFindings = normalizePostureFindings(postureFindings);
+  const primary = primaryPain || problemArea || null;
 
-  // Primary pain — full weight
+  let score = 72;
+
+  // Primary pain
   if (primary === "radiating") score -= 18;
   else if (primary === "low_back") score -= 8;
   else if (primary === "mid_back") score -= 6;
   else if (primary === "neck") score -= 5;
 
-  // Secondary pain — 30% weight each
-  secondaryPain.forEach((area) => {
-    if (area === "radiating") score -= Math.round(18 * 0.3);
-    else if (area === "low_back") score -= Math.round(8 * 0.3);
-    else if (area === "mid_back") score -= Math.round(6 * 0.3);
-    else if (area === "neck") score -= Math.round(5 * 0.3);
+  // Secondary pain gets lighter weight
+  (secondaryPain || []).forEach((area) => {
+    if (area === "radiating") score -= 5;
+    else if (area === "low_back") score -= 2;
+    else if (area === "mid_back") score -= 2;
+    else if (area === "neck") score -= 1;
   });
 
-  // Multiple regions penalty
-  const allAreas = [primary, ...secondaryPain].filter(Boolean);
+  // Multiple region penalty
+  const allAreas = [primary, ...(secondaryPain || [])].filter(Boolean);
   if (allAreas.length > 1) score -= 4;
 
-  // Movement response modifier
-  if (movementResponse === "worse") score -= 14;
+  // Movement response
+  if (movementResponse === "worse") score -= 12;
   else if (movementResponse === "stiff_then_better") score -= 4;
   else if (movementResponse === "better") score += 4;
 
-  // Sitting time modifier
-  if (sittingHours === "6plus") score -= 10;
-  else if (sittingHours === "3to6") score -= 5;
+  // Sitting
+  if (sittingHours === "6plus") score -= 8;
+  else if (sittingHours === "3to6") score -= 4;
   else if (sittingHours === "under3") score += 3;
 
-  // Activity modifier
+  // Activity
   if (activityLevel === "sedentary") score -= 8;
+  else if (activityLevel === "moderate") score += 1;
   else if (activityLevel === "very_active") score += 5;
-  else score += 1;
 
-  // Age modifier
-  if (ageRange === "55plus") score -= 7;
-  else if (ageRange === "40to55") score -= 4;
-  else if (ageRange === "under25") score += 3;
+  // Age
+  if (ageRange === "55plus") score -= 5;
+  else if (ageRange === "40to55") score -= 3;
+  else if (ageRange === "under25") score += 2;
 
-  // Posture findings deductions
-  if (postureFindings.includes("forward_head")) score -= 5;
-  if (postureFindings.includes("rounded_shoulders")) score -= 4;
-  if (postureFindings.includes("anterior_pelvic_tilt")) score -= 4;
+  // Optional posture findings can slightly shape baseline
+  if (normalizedFindings.includes("forward_head")) score -= 3;
+  if (normalizedFindings.includes("rounded_shoulders")) score -= 3;
+  if (normalizedFindings.includes("anterior_pelvic_tilt")) score -= 3;
 
-  return Math.max(18, Math.min(96, Math.round(score)));
+  return clamp(score, 30, 95);
 }
 
-/**
- * Calculate sub-scores for Mobility, Strength/Stability, Posture
- */
-export function calculateBreakdown(answers, postureFindings = []) {
-  const { movementResponse, sittingHours, activityLevel, ageRange } = answers;
+// Backward-compatible alias for older code
+export function calculateSpineScore(answers, postureFindings = []) {
+  return calculateStructuralBaseline(answers, postureFindings);
+}
 
-  // Mobility score
+// ── Consistency score ────────────────────────────────────────────────────────
+export function getInitialConsistencyScore() {
+  return 50;
+}
+
+export function updateConsistencyScore(currentScore = 50, completedToday = true) {
+  let next = currentScore ?? 50;
+  next += completedToday ? 2 : -1;
+  return clamp(next, 0, 100);
+}
+
+export function applyStreakBonus(consistencyScore = 50, streak = 0) {
+  let bonus = 0;
+
+  if (streak >= 14) bonus = 8;
+  else if (streak >= 7) bonus = 5;
+  else if (streak >= 3) bonus = 3;
+
+  return clamp(consistencyScore + bonus, 0, 100);
+}
+
+// ── Structural score updates from scans ──────────────────────────────────────
+export function applyScanToStructural(currentStructural = 50, scanScore = 50) {
+  const blended = currentStructural + (scanScore - currentStructural) * 0.25;
+  return clamp(blended, 0, 100);
+}
+
+// Optional weekly momentum bonus for strong adherence
+export function applyWeeklyMomentum(structuralScore = 50, completedDays = 0) {
+  let bonus = 0;
+
+  if (completedDays >= 7) bonus = 6;
+  else if (completedDays >= 5) bonus = 4;
+  else if (completedDays >= 4) bonus = 3;
+
+  return clamp(structuralScore + bonus, 0, 100);
+}
+
+// ── Final score shown to user ────────────────────────────────────────────────
+export function calculateFinalSpineScore(structuralScore = 50, consistencyScore = 50) {
+  const finalScore = structuralScore * 0.7 + consistencyScore * 0.3;
+  return clamp(finalScore, 0, 100);
+}
+
+// ── Breakdown shown in onboarding / dashboard ────────────────────────────────
+export function calculateBreakdown(answers, postureFindings = []) {
+  const { movementResponse, sittingHours, activityLevel, ageRange } = answers || {};
+  const normalizedFindings = normalizePostureFindings(postureFindings);
+
   let mobility = 68;
   if (movementResponse === "worse") mobility -= 20;
   else if (movementResponse === "stiff_then_better") mobility -= 8;
   else if (movementResponse === "better") mobility += 8;
+
   if (sittingHours === "6plus") mobility -= 10;
   else if (sittingHours === "3to6") mobility -= 5;
+
   if (ageRange === "55plus") mobility -= 8;
   else if (ageRange === "40to55") mobility -= 4;
 
-  // Strength / Stability score
   let strength = 65;
   if (activityLevel === "very_active") strength += 15;
   else if (activityLevel === "moderate") strength += 5;
   else if (activityLevel === "sedentary") strength -= 12;
+
   if (ageRange === "55plus") strength -= 6;
 
-  // Posture score
   let posture = 70;
   if (sittingHours === "6plus") posture -= 12;
   else if (sittingHours === "3to6") posture -= 6;
-  if (postureFindings.includes("forward_head")) posture -= 12;
-  if (postureFindings.includes("rounded_shoulders")) posture -= 10;
-  if (postureFindings.includes("anterior_pelvic_tilt")) posture -= 8;
+
+  if (normalizedFindings.includes("forward_head")) posture -= 12;
+  if (normalizedFindings.includes("rounded_shoulders")) posture -= 10;
+  if (normalizedFindings.includes("anterior_pelvic_tilt")) posture -= 8;
 
   return {
-    mobility: Math.max(15, Math.min(95, Math.round(mobility))),
-    strength: Math.max(15, Math.min(95, Math.round(strength))),
-    posture: Math.max(15, Math.min(95, Math.round(posture))),
+    mobility: clamp(mobility, 15, 95),
+    strength: clamp(strength, 15, 95),
+    posture: clamp(posture, 15, 95),
   };
 }
 
-/**
- * Generate plan focus areas based on archetype, answers, and goals.
- * Supports primaryGoal + secondaryGoals (multi-select) or legacy goal field.
- */
+// ── Plan focus generation ────────────────────────────────────────────────────
 export function generatePlanFocus(archetypeKey, answers, postureFindings = []) {
-  const { primaryGoal, secondaryGoals = [], goal, sittingHours, ageRange, secondaryPain = [] } = answers;
+  const {
+    primaryGoal,
+    secondaryGoals = [],
+    goal,
+    sittingHours,
+    ageRange,
+    secondaryPain = [],
+  } = answers || {};
 
-  const mainGoal = primaryGoal || goal;
-  const archetype = ARCHETYPES[archetypeKey];
+  const normalizedFindings = normalizePostureFindings(postureFindings);
+  const mainGoal = primaryGoal || goal || null;
+  const archetype = ARCHETYPES[archetypeKey] || ARCHETYPES.deconditioned;
   const focus = [...archetype.focus];
 
-  // Primary goal — drives main structure
   if (mainGoal === "pain_relief") {
     focus.unshift("Daily pain management techniques");
   } else if (mainGoal === "better_posture") {
@@ -183,34 +304,35 @@ export function generatePlanFocus(archetypeKey, answers, postureFindings = []) {
     focus.push("Strength progression and loaded movement");
   }
 
-  // Secondary goals — modify exercise selection
-  secondaryGoals.forEach((g) => {
-    if (g === "pain_relief" && mainGoal !== "pain_relief") focus.splice(2, 0, "Pain management support work");
-    if (g === "better_posture" && mainGoal !== "better_posture") focus.splice(2, 0, "Postural awareness drills");
-    if (g === "performance" && mainGoal !== "performance") focus.push("Supplemental strength work");
+  (secondaryGoals || []).forEach((g) => {
+    if (g === "pain_relief" && mainGoal !== "pain_relief") {
+      focus.splice(2, 0, "Pain management support work");
+    }
+    if (g === "better_posture" && mainGoal !== "better_posture") {
+      focus.splice(2, 0, "Postural awareness drills");
+    }
+    if (g === "performance" && mainGoal !== "performance") {
+      focus.push("Supplemental strength work");
+    }
   });
 
-  // Secondary pain — add supporting work
-  secondaryPain.forEach((area) => {
+  (secondaryPain || []).forEach((area) => {
     if (area === "neck") focus.push("Cervical mobility and deep neck flexor work");
     else if (area === "mid_back") focus.push("Thoracic mobility and rib cage expansion");
     else if (area === "low_back") focus.push("Lumbar stabilisation and hip hinge patterning");
     else if (area === "radiating") focus.push("Nerve tensioner and decompression work");
   });
 
-  // Sitting modifier
   if (sittingHours === "6plus") {
     if (!focus.includes("Hip flexor and thoracic mobility")) {
       focus.splice(1, 0, "Hip flexor and thoracic mobility");
     }
   }
 
-  // Posture findings
-  if (postureFindings.includes("forward_head")) {
+  if (normalizedFindings.includes("forward_head")) {
     focus.splice(1, 0, "Forward head posture correction");
   }
 
-  // Age modifier
   if (ageRange === "55plus" || ageRange === "40to55") {
     focus.push("Low-impact joint-friendly progressions");
   }

@@ -5,7 +5,7 @@ import { ArrowRight, Activity, Scan, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const HIGHLIGHTS = [
-  { icon: Activity, text: "Personalized recovery plan" },
+  { icon: Activity, text: "Personalized exercise plan" },
   { icon: Scan, text: "AI posture analysis" },
   { icon: TrendingUp, text: "Spine Score tracking" },
 ];

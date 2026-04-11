@@ -3,7 +3,7 @@ import { Home, Activity, Scan, TrendingUp, User } from "lucide-react";
 import { motion } from "framer-motion";
 
 const navItems = [
-  { path: "/", icon: Home, label: "Home" },
+  { path: "/dashboard", icon: Home, label: "Home" },
   { path: "/routine", icon: Activity, label: "Routine" },
   { path: "/scan", icon: Scan, label: "Scan" },
   { path: "/progress", icon: TrendingUp, label: "Progress" },
@@ -24,6 +24,7 @@ export default function Layout() {
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
+
             return (
               <Link
                 key={item.path}
@@ -38,6 +39,7 @@ export default function Layout() {
                       transition={{ type: "spring", stiffness: 400, damping: 30 }}
                     />
                   )}
+
                   <Icon
                     className={`relative w-5 h-5 transition-colors ${
                       isActive ? "text-primary" : "text-muted-foreground"
@@ -45,6 +47,7 @@ export default function Layout() {
                     strokeWidth={isActive ? 2.5 : 1.5}
                   />
                 </div>
+
                 <span
                   className={`text-[10px] font-medium transition-colors ${
                     isActive ? "text-primary" : "text-muted-foreground"

@@ -1,32 +1,23 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Ruler, RotateCcw, User, HardHat, Timer } from "lucide-react";
+import { Ruler, RotateCcw, User, HardHat, Timer, ShieldCheck } from "lucide-react";
 
 function SideSilhouette() {
   return (
     <svg viewBox="0 0 160 340" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-      {/* Head */}
       <ellipse cx="86" cy="30" rx="18" ry="21" fill="currentColor" opacity="0.18" />
-      {/* Neck */}
       <path d="M82 50 Q80 62 79 70" stroke="currentColor" strokeWidth="9" strokeLinecap="round" fill="none" opacity="0.18" />
-      {/* Torso */}
       <path d="M72 70 Q65 110 67 148 Q69 172 80 184"
         stroke="currentColor" strokeWidth="24" strokeLinecap="round" fill="none" opacity="0.15" />
-      {/* Arm */}
       <path d="M69 82 Q62 118 63 148"
         stroke="currentColor" strokeWidth="10" strokeLinecap="round" fill="none" opacity="0.12" />
-      {/* Pelvis */}
       <ellipse cx="78" cy="186" rx="16" ry="11" fill="currentColor" opacity="0.15" />
-      {/* Upper leg */}
       <path d="M78 196 Q78 230 79 262"
         stroke="currentColor" strokeWidth="18" strokeLinecap="round" fill="none" opacity="0.15" />
-      {/* Lower leg */}
       <path d="M79 262 Q80 292 81 318"
         stroke="currentColor" strokeWidth="13" strokeLinecap="round" fill="none" opacity="0.14" />
-      {/* Foot */}
       <path d="M76 318 Q81 328 100 326 Q106 325 106 322 Q92 320 81 318"
         fill="currentColor" opacity="0.15" />
-      {/* Plumb line */}
       <line x1="80" y1="10" x2="80" y2="330"
         stroke="currentColor" strokeWidth="1" strokeDasharray="5,4" opacity="0.18" />
     </svg>
@@ -35,20 +26,20 @@ function SideSilhouette() {
 
 const STEPS = [
   {
-    icon: Ruler,
-    text: "Stand 8–12 feet away from your phone",
+    icon: RotateCcw,
+    text: "Stand sideways to the camera (left OR right)",
   },
   {
-    icon: RotateCcw,
-    text: "Turn fully sideways to the camera",
+    icon: Ruler,
+    text: "Upper body scan: stand about 5–6 feet away",
   },
   {
     icon: User,
-    text: "Make sure your full body is in frame",
+    text: "Full body scan: stand 8–12 feet away",
   },
   {
     icon: HardHat,
-    text: "Remove hats or bulky clothing",
+    text: "Make sure ear, shoulder, and hip are visible",
   },
 ];
 
@@ -65,8 +56,25 @@ export default function LandmarkGuide({ onCamera }) {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-1.5">
           AI Posture Scan
         </p>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Posture Scan</h1>
-        <p className="text-sm text-muted-foreground mt-1 font-medium">Takes about 5 seconds</p>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          Posture Scan
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1 font-medium">
+          Takes about 5 seconds
+        </p>
+      </motion.div>
+
+      {/* lightweight reminder */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="mb-4 flex items-start gap-3 bg-secondary border border-border rounded-2xl px-4 py-3"
+      >
+        <ShieldCheck className="w-4 h-4 text-primary mt-0.5" />
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Your photo is used only for posture analysis. This is not medical advice.
+          You can delete scans anytime from your account.
+        </p>
       </motion.div>
 
       {/* Silhouette */}
@@ -107,7 +115,9 @@ export default function LandmarkGuide({ onCamera }) {
               <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                 <Icon className="w-4 h-4 text-primary" />
               </div>
-              <p className="text-sm text-foreground/85 font-medium leading-snug">{text}</p>
+              <p className="text-sm text-foreground/85 font-medium leading-snug">
+                {text}
+              </p>
             </motion.div>
           ))}
         </div>

@@ -1,153 +1,791 @@
-import React, { useState, useMemo, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Flame, SlidersHorizontal, Play, Check, ChevronRight } from "lucide-react";
-import { format, subDays } from "date-fns";
-import { useCurrentUser } from "@/lib/useCurrentUser";
+import {
+  Flame,
+  Play,
+  Check,
+  ChevronRight,
+  Sparkles,
+  Trophy,
+  Star,
+  SlidersHorizontal,
+} from "lucide-react";
 import MedicalDisclaimer from "@/components/legal/MedicalDisclaimer";
-import ExerciseSilhouette from "@/components/routine/ExerciseSilhouette";
 import WorkoutSession from "@/components/routine/WorkoutSession";
 import ExerciseDetailView from "@/components/routine/ExerciseDetailView";
+import ExerciseMedia from "@/components/routine/ExerciseMedia";
 import DailyAdjustSheet from "@/components/routine/DailyAdjustSheet";
-import {
-  generateDailySystemPlan,
-  resolveLevel,
-  getDayIndex,
-  getDayOfPlan,
-  isSeatedMode,
-  applyIntensity,
-  getProgressMessage,
-  LEVELS,
-} from "@/lib/dailySystem";
+import { supabase } from "@/lib/supabase";
 
-const CATEGORY_COLORS = {
-  breathing: "bg-sky-100 text-sky-700",
-  posture:   "bg-violet-100 text-violet-700",
-  mobility:  "bg-emerald-100 text-emerald-700",
-  stability: "bg-orange-100 text-orange-700",
+const STORAGE_KEYS = {
+  rewardPoints: "spinelab_reward_points",
+  routineDayKey: "spinelab_routine_day_key",
+  lockedDayIndex: "spinelab_locked_day_index",
+  completedDayKey: "spinelab_completed_day_key",
 };
 
-export default function Routine() {
-  const queryClient = useQueryClient();
-  const { data: user } = useCurrentUser();
+const CATEGORY_COLORS = {
+  breathing: "bg-sky-100 text-sky-700 border-sky-200",
+  posture: "bg-violet-100 text-violet-700 border-violet-200",
+  mobility: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  stability: "bg-orange-100 text-orange-700 border-orange-200",
+  strength: "bg-rose-100 text-rose-700 border-rose-200",
+};
 
-  const { data: profiles } = useQuery({
-    queryKey: ["userProfile", user?.email],
-    queryFn: () => base44.entities.UserProfile.filter({ created_by: user.email }),
-    enabled: !!user?.email,
-    initialData: [],
-  });
+const CATEGORY_LABELS = {
+  breathing: "Breathing",
+  posture: "Posture",
+  mobility: "Mobility",
+  stability: "Stability",
+  strength: "Strength",
+};
 
-  const { data: checkIns } = useQuery({
-    queryKey: ["checkIns", user?.email],
-    queryFn: () => base44.entities.DailyCheckIn.filter({ created_by: user.email }, "-created_date", 60),
-    enabled: !!user?.email,
-    initialData: [],
-  });
+function loadLocalJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
-  const profile = profiles[0];
-  const todayStr = format(new Date(), "yyyy-MM-dd");
-  const todayCheckIn = checkIns.find((c) => c.date === todayStr);
-  const routineCompleted = todayCheckIn?.completed;
+function saveLocalJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
 
-  // ── Session state ────────────────────────────────────────────────────────
-  const [sessionActive, setSessionActive] = useState(false);
-  const [selectedExercise, setSelectedExercise] = useState(null); // single exercise preview
-  const [showAdjuster, setShowAdjuster] = useState(false);
-  const [activeRestrictions, setActiveRestrictions] = useState([]);
-  const [tempLevelOverride, setTempLevelOverride] = useState(null); // "easy" for today only
-  const [permanentLevelBoost, setPermanentLevelBoost] = useState(null); // forced level up
+function getTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
 
-  // ── Plan generation ──────────────────────────────────────────────────────
-  const baseLevel = resolveLevel(checkIns);
-  const effectiveLevel = permanentLevelBoost
-    ? permanentLevelBoost
-    : tempLevelOverride
-    ? tempLevelOverride
-    : baseLevel;
+function formatDuration(totalSeconds = 0) {
+  if (!totalSeconds) return "—";
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  return `${Math.ceil(totalSeconds / 60)} min`;
+}
 
-  const seatedMode = isSeatedMode(activeRestrictions);
-  const dayIndex   = getDayIndex(checkIns);
-  const dayOfPlan  = getDayOfPlan(checkIns);
+function getStreakReward(streak) {
+  const nextStreak = (streak || 0) + 1;
+  if (nextStreak % 7 === 0) return { label: "+30 points", points: 30 };
+  if (nextStreak % 3 === 0) return { label: "+20 points", points: 20 };
+  return { label: "+10 points", points: 10 };
+}
 
-  // Real consecutive streak — computed from actual check-in dates
-  const completedDates = useMemo(() => new Set(checkIns.filter((c) => c.completed).map((c) => c.date)), [checkIns]);
-  const computeStreak = (datesSet) => {
-    let count = 0;
-    let cur = new Date();
-    // Don't count today yet if not completed
-    if (!datesSet.has(format(cur, "yyyy-MM-dd"))) cur = subDays(cur, 1);
-    while (datesSet.has(format(cur, "yyyy-MM-dd"))) { count++; cur = subDays(cur, 1); }
-    return count;
+function getProgressMessage(streak) {
+  if (streak >= 13) return "You’re building real momentum. Keep it rolling.";
+  if (streak >= 6) return "One more strong week and this starts becoming a habit.";
+  if (streak >= 2) return "Nice work. Consistency is starting to stack.";
+  return "Start today and build your first streak.";
+}
+
+function getTodayFocus(planType) {
+  if (planType === "neck") return "Neck + posture reset";
+  if (planType === "mid_back") return "Upper back + posture opening";
+  if (planType === "low_back") return "Core + pelvic support";
+  return "Balanced spine support";
+}
+
+function buildExerciseLibrary() {
+  return {
+    "360 Breathing": {
+      name: "360 Breathing",
+      category: "breathing",
+      video: "/exercises/99751201-Sitting-Lateral-Costal-Breathing-(female)_Waist_.mp4",
+      instructions: [
+        "Breathe into your ribs, sides, and low back.",
+        "Keep your shoulders relaxed.",
+        "Take slow, full breaths and stay relaxed.",
+      ],
+    },
+    "Hip Flexor Stretch": {
+      name: "Hip Flexor Stretch",
+      category: "mobility",
+      image: "/exercises/10531101-Kneeling-Hip-Flexor-Stretch_Hips-FIX_medium.png",
+      instructions: [
+        "Set up in a half-kneeling position with one knee down.",
+        "Gently shift forward until you feel a stretch in the front of the hip.",
+        "Breathe slowly and keep your ribs stacked over your pelvis.",
+      ],
+    },
+    "Bent Arm Chest Stretch": {
+      name: "Bent Arm Chest Stretch",
+      category: "mobility",
+      image: "/exercises/17801101-Bent-Arm-Chest-Stretch_Chest_medium.png",
+      instructions: [
+        "Place the arm against the wall with the elbow bent.",
+        "Rotate your chest gently away until you feel the front of the chest open.",
+        "Do not arch your low back while you hold the stretch.",
+      ],
+    },
+    "Sitting Neck Flexion Stretch": {
+      name: "Sitting Neck Flexion Stretch",
+      category: "mobility",
+      image: "/exercises/18351101-Sitting-Neck-Flexion-Stretch_Neck_medium.png",
+      instructions: [
+        "Sit tall with your shoulders relaxed.",
+        "Gently nod and bring your chin downward until a stretch is felt.",
+        "Stay easy and do not pull aggressively into pain.",
+      ],
+    },
+    "Shoulder Lateral Rotation": {
+      name: "Shoulder Lateral Rotation",
+      category: "posture",
+      gif: "/exercises/27791301-Shoulder---Lateral-Rotation-(External-Rotation)_Articulations_360.gif",
+      instructions: [
+        "Stand or sit tall with elbows close to your sides.",
+        "Rotate the forearms outward with control without shrugging.",
+        "Keep the movement smooth and controlled the whole time.",
+      ],
+    },
+    "Side Plank": {
+      name: "Side Plank",
+      category: "stability",
+      image: "/exercises/28991101-Side-Plank-(beginner)-(female)_medium.png",
+      instructions: [
+        "Set up with your elbow under your shoulder.",
+        "Lift your hips and keep your ribs stacked over your pelvis.",
+        "Breathe steadily while keeping the trunk braced.",
+      ],
+    },
+    "Glute Bridge": {
+      name: "Glute Bridge",
+      category: "strength",
+      gif: "/exercises/30131301-Low-Glute-Bridge-on-floor_Hips_360.gif",
+      instructions: [
+        "Lie on your back with knees bent and feet planted.",
+        "Drive through your heels and lift your hips without over-arching.",
+        "Squeeze the glutes at the top and lower with control.",
+      ],
+    },
+    "Bird Dog": {
+      name: "Bird Dog",
+      category: "stability",
+      gif: "/exercises/31411301-Bird-Dog-(female)-FIX_360.gif",
+      instructions: [
+        "Start on hands and knees with a neutral spine.",
+        "Reach opposite arm and leg away while keeping the trunk still.",
+        "Move slowly and avoid twisting through the low back.",
+      ],
+    },
+    "Pelvic Tilt": {
+      name: "Pelvic Tilt",
+      category: "mobility",
+      gif: "/exercises/31471301-Pelvic-Tilt_Hips-FIX_360.gif",
+      instructions: [
+        "Lie on your back with knees bent.",
+        "Gently rock the pelvis to flatten the low back, then release.",
+        "Keep the motion small and controlled.",
+      ],
+    },
+    "Chin Tuck": {
+      name: "Chin Tuck",
+      category: "posture",
+      image: "/exercises/31491101-Chin-Tuck_Neck_medium.png",
+      instructions: [
+        "Sit or stand tall with eyes level.",
+        "Draw your chin straight back like making a double chin.",
+        "Do not tilt the head down while you move.",
+      ],
+    },
+    "Cat Cow Stretch": {
+      name: "Cat Cow Stretch",
+      category: "mobility",
+      image: "/exercises/45801101-Cat-Cow-Stretch_Stretching_medium.png",
+      instructions: [
+        "Start on hands and knees.",
+        "Move smoothly between rounding and extending the spine.",
+        "Keep the movement easy and do not force range.",
+      ],
+    },
+    "Holding Squat": {
+      name: "Holding Squat",
+      category: "strength",
+      image: "/exercises/63441101-Holding-Squat-(male)_Thighs_medium.png",
+      instructions: [
+        "Lower into a comfortable squat depth.",
+        "Keep your chest tall and heels grounded.",
+        "Breathe steadily while holding the position.",
+      ],
+    },
+    "Forward Head Posture Hold": {
+      name: "Forward Head Posture Hold",
+      category: "posture",
+      video: "/exercises/77911201-Forward-Head-Posture-Hold-(female)_Stretching_.mp4",
+      instructions: [
+        "Stack your head over your shoulders.",
+        "Gently retract the chin and keep the neck long.",
+        "Hold without straining or tensing the shoulders.",
+      ],
+    },
+    "Standing Scapular External Rotation": {
+      name: "Standing Scapular External Rotation",
+      category: "posture",
+      video: "/exercises/77921201-Standing-Scapular-External-Rotation-Hold-(female)_.mp4",
+      instructions: [
+        "Stand tall with elbows near your sides.",
+        "Rotate outward while keeping the shoulder blades controlled.",
+        "Avoid shrugging or flaring the ribs.",
+      ],
+    },
+    "Dead Bug": {
+      name: "Dead Bug",
+      category: "stability",
+      gif: "/exercises/78391301-Dead-Bug-(VERSION-3)-(female)_Waist_360.gif",
+      instructions: [
+        "Lie on your back with knees and arms up.",
+        "Lower the opposite arm and leg slowly while bracing the core.",
+        "Keep the low back steady against the floor.",
+      ],
+    },
+    "Seated Upright Twists": {
+      name: "Seated Upright Twists",
+      category: "mobility",
+      gif: "/exercises/83031301-Seated-Upright-Twists-on-a-Chair-(male)_Waist_360.gif",
+      instructions: [
+        "Sit tall near the front of the chair.",
+        "Rotate gently through the upper back from side to side.",
+        "Keep the motion smooth and easy.",
+      ],
+    },
+    "Wall Angels Standing": {
+      name: "Wall Angels Standing",
+      category: "posture",
+      video: "/exercises/84351201-Standing-Angel-Wall-Supported-(male)_Shoulders_.mp4",
+      instructions: [
+        "Stand against the wall with ribs down.",
+        "Slide your arms upward while keeping control through the shoulders.",
+        "Move slowly and do not force contact with the wall.",
+      ],
+    },
+    "Lying Floor Row Hold": {
+      name: "Lying Floor Row Hold",
+      category: "strength",
+      video: "/exercises/90291201-Lying-Floor-Row-Hold-with-Bent-Knee_Back_.mp4",
+      instructions: [
+        "Lie face down or in the demonstrated row-hold position.",
+        "Pull the elbows back and squeeze the upper back.",
+        "Hold without shrugging toward the ears.",
+      ],
+    },
+    "Sitting Thoracic Spine Flexion": {
+      name: "Sitting Thoracic Spine Flexion",
+      category: "mobility",
+      video: "/exercises/93331201-Sitting-Thoracic-Spine-Flexion-(male)_Stretching_.mp4",
+      instructions: [
+        "Sit tall with feet grounded.",
+        "Round gently through the upper back while keeping the movement controlled.",
+        "Ease in and out without forcing the stretch.",
+      ],
+    },
+    "Kneeling Thoracic Spine Extension": {
+      name: "Kneeling Thoracic Spine Extension",
+      category: "mobility",
+      video: "/exercises/98851201-Kneeling-Thoracic-Spine-Extension-(female)_Hips_.mp4",
+      instructions: [
+        "Set up in kneeling as shown.",
+        "Open through the chest and upper back with control.",
+        "Keep the low back quiet and breathe normally.",
+      ],
+    },
+    "Single Leg Glute Bridge": {
+      name: "Single Leg Glute Bridge",
+      category: "strength",
+      gif: "/exercises/51981301-Single-Straight-Leg-Glute-Bridge-Hold-(female)_Hips_360.gif",
+      instructions: [
+        "Set up on your back with one foot planted.",
+        "Lift the hips while keeping them level.",
+        "Hold with glutes engaged and avoid twisting.",
+      ],
+    },
   };
-  const streak = useMemo(() => computeStreak(completedDates), [completedDates]);
+}
 
-  const exercises = useMemo(
-    () => generateDailySystemPlan(dayIndex, effectiveLevel, seatedMode),
-    [dayIndex, effectiveLevel, seatedMode]
+function withLevel(exercise, level) {
+  const base = { ...exercise };
+
+  const config = {
+    easy: {
+      hold: 20,
+      reps: 6,
+      sets: 1,
+      perSideHold: 15,
+      perSideReps: 5,
+    },
+    moderate: {
+      hold: 30,
+      reps: 10,
+      sets: 2,
+      perSideHold: 20,
+      perSideReps: 8,
+    },
+    hard: {
+      hold: 45,
+      reps: 14,
+      sets: 2,
+      perSideHold: 30,
+      perSideReps: 10,
+    },
+  };
+
+  const c = config[level] || config.moderate;
+
+  const breathingExercises = ["360 Breathing"];
+
+  const holdExercises = [
+    "Side Plank",
+    "Forward Head Posture Hold",
+    "Wall Angels Standing",
+    "Single Leg Glute Bridge",
+    "Lying Floor Row Hold",
+    "Holding Squat",
+    "Hip Flexor Stretch",
+    "Bent Arm Chest Stretch",
+    "Sitting Neck Flexion Stretch",
+    "Chin Tuck",
+    "Kneeling Thoracic Spine Extension",
+  ];
+
+  const repExercises = [
+    "Glute Bridge",
+    "Bird Dog",
+    "Dead Bug",
+    "Pelvic Tilt",
+    "Shoulder Lateral Rotation",
+    "Cat Cow Stretch",
+    "Standing Scapular External Rotation",
+    "Seated Upright Twists",
+    "Sitting Thoracic Spine Flexion",
+  ];
+
+  const perSideHoldExercises = [
+    "Side Plank",
+    "Hip Flexor Stretch",
+    "Bent Arm Chest Stretch",
+    "Single Leg Glute Bridge",
+  ];
+
+  if (breathingExercises.includes(base.name)) {
+    base.durationSecs = 54;
+    base.dosage = "6 slow breaths";
+    return base;
+  }
+
+  if (perSideHoldExercises.includes(base.name)) {
+    base.durationSecs = c.perSideHold * 2;
+    base.dosage = `${c.sets} x ${c.perSideHold}s each side`;
+    return base;
+  }
+
+  if (holdExercises.includes(base.name)) {
+    base.durationSecs = c.hold;
+    base.dosage = `${c.sets} x ${c.hold}s hold`;
+    return base;
+  }
+
+  if (repExercises.includes(base.name)) {
+    base.durationSecs = c.reps * 3;
+    base.dosage = `${c.sets} x ${c.reps} reps`;
+    return base;
+  }
+
+  base.durationSecs = c.hold;
+  base.dosage = `${c.sets} x ${c.hold}s`;
+  return base;
+}
+
+function normalizeExercise(ex, index = 0) {
+  return {
+    id: ex?.id || `${ex?.name || "exercise"}-${index}`,
+    name: ex?.name || "Exercise",
+    category: ex?.category || "mobility",
+    durationSecs: ex?.durationSecs || 30,
+    dosage: ex?.dosage || "",
+    instructions:
+      Array.isArray(ex?.instructions) && ex.instructions.length
+        ? ex.instructions
+        : ["Move slowly and stay controlled."],
+    video: ex?.video || "",
+    gif: ex?.gif || "",
+    image: ex?.image || "",
+  };
+}
+
+function getChairOnlyPlan() {
+  return [
+    "360 Breathing",
+    "Sitting Neck Flexion Stretch",
+    "Seated Upright Twists",
+    "Bent Arm Chest Stretch",
+    "Sitting Thoracic Spine Flexion",
+  ];
+}
+
+function getPlanTemplate(planType, dayIndex) {
+  const plans = {
+    neck: [
+      [
+        "360 Breathing",
+        "Chin Tuck",
+        "Forward Head Posture Hold",
+        "Bent Arm Chest Stretch",
+        "Wall Angels Standing",
+      ],
+      [
+        "360 Breathing",
+        "Sitting Neck Flexion Stretch",
+        "Standing Scapular External Rotation",
+        "Seated Upright Twists",
+        "Bent Arm Chest Stretch",
+      ],
+    ],
+    mid_back: [
+      [
+        "360 Breathing",
+        "Wall Angels Standing",
+        "Kneeling Thoracic Spine Extension",
+        "Lying Floor Row Hold",
+        "Bent Arm Chest Stretch",
+      ],
+      [
+        "360 Breathing",
+        "Seated Upright Twists",
+        "Sitting Thoracic Spine Flexion",
+        "Standing Scapular External Rotation",
+        "Wall Angels Standing",
+      ],
+    ],
+    low_back: [
+      [
+        "360 Breathing",
+        "Pelvic Tilt",
+        "Dead Bug",
+        "Glute Bridge",
+        "Cat Cow Stretch",
+      ],
+      [
+        "360 Breathing",
+        "Bird Dog",
+        "Side Plank",
+        "Single Leg Glute Bridge",
+        "Pelvic Tilt",
+      ],
+    ],
+    balanced: [
+      [
+        "360 Breathing",
+        "Chin Tuck",
+        "Seated Upright Twists",
+        "Glute Bridge",
+        "Wall Angels Standing",
+      ],
+      [
+        "360 Breathing",
+        "Forward Head Posture Hold",
+        "Kneeling Thoracic Spine Extension",
+        "Bird Dog",
+        "Bent Arm Chest Stretch",
+      ],
+      [
+        "360 Breathing",
+        "Sitting Neck Flexion Stretch",
+        "Sitting Thoracic Spine Flexion",
+        "Dead Bug",
+        "Standing Scapular External Rotation",
+      ],
+    ],
+  };
+
+  const selected = plans[planType] || plans.balanced;
+  return selected[dayIndex % selected.length];
+}
+
+function getExerciseObjects(planType, dayIndex, level, chairOnly) {
+  const library = buildExerciseLibrary();
+  const names = chairOnly ? getChairOnlyPlan() : getPlanTemplate(planType, dayIndex);
+
+  return names.map((name, index) =>
+    normalizeExercise(
+      withLevel(library[name] || { name, category: "mobility" }, level),
+      index
+    )
+  );
+}
+
+function getNextHigherLevel(level) {
+  if (level === "easy") return "moderate";
+  if (level === "moderate") return "hard";
+  return "hard";
+}
+
+function getNextLowerLevel(level) {
+  if (level === "hard") return "moderate";
+  if (level === "moderate") return "easy";
+  return "easy";
+}
+
+export default function Routine() {
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+
+  const [sessionActive, setSessionActive] = useState(false);
+  const [selectedExercise, setSelectedExercise] = useState(null);
+  const [routineCompleted, setRoutineCompleted] = useState(false);
+  const [rewardPoints, setRewardPoints] = useState(0);
+  const [earnedToday, setEarnedToday] = useState(null);
+  const [showAdjuster, setShowAdjuster] = useState(false);
+  const [chairOnlyToday, setChairOnlyToday] = useState(false);
+
+  const [todayKey, setTodayKey] = useState(getTodayKey());
+  const [lockedDayIndex, setLockedDayIndex] = useState(0);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const savedPoints = loadLocalJSON(STORAGE_KEYS.rewardPoints, 0);
+        setRewardPoints(savedPoints || 0);
+
+        setChairOnlyToday(false);
+
+        const storedDayKey = loadLocalJSON(STORAGE_KEYS.routineDayKey, null);
+        const storedLockedDayIndex = loadLocalJSON(STORAGE_KEYS.lockedDayIndex, null);
+        const storedCompletedDayKey = loadLocalJSON(STORAGE_KEYS.completedDayKey, null);
+        const currentDayKey = getTodayKey();
+
+        setTodayKey(currentDayKey);
+        setRoutineCompleted(storedCompletedDayKey === currentDayKey);
+
+        const {
+          data: { user: currentUser },
+        } = await supabase.auth.getUser();
+
+        setUser(currentUser ?? null);
+
+        if (!currentUser?.id) {
+          setLoading(false);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", currentUser.id)
+          .maybeSingle();
+
+        if (error) throw error;
+        setProfile(data || null);
+
+        const currentStreak = data?.current_streak || 0;
+        const computedDayIndex = currentStreak % 7;
+
+        if (
+          storedDayKey === currentDayKey &&
+          typeof storedLockedDayIndex === "number"
+        ) {
+          setLockedDayIndex(storedLockedDayIndex);
+        } else {
+          setLockedDayIndex(computedDayIndex);
+          saveLocalJSON(STORAGE_KEYS.routineDayKey, currentDayKey);
+          saveLocalJSON(STORAGE_KEYS.lockedDayIndex, computedDayIndex);
+        }
+      } catch (err) {
+        console.error("[Routine] load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  useEffect(() => {
+    saveLocalJSON(STORAGE_KEYS.rewardPoints, rewardPoints);
+  }, [rewardPoints]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newTodayKey = getTodayKey();
+
+      if (newTodayKey !== todayKey) {
+        setTodayKey(newTodayKey);
+
+        const nextDayIndex = (profile?.current_streak || 0) % 7;
+        setLockedDayIndex(nextDayIndex);
+        setRoutineCompleted(false);
+        setEarnedToday(null);
+        setChairOnlyToday(false);
+
+        saveLocalJSON(STORAGE_KEYS.routineDayKey, newTodayKey);
+        saveLocalJSON(STORAGE_KEYS.lockedDayIndex, nextDayIndex);
+        saveLocalJSON(STORAGE_KEYS.completedDayKey, null);
+      }
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [todayKey, profile]);
+
+  const streak = profile?.current_streak || 0;
+  const dayIndex = lockedDayIndex;
+  const planType = profile?.plan_type || "balanced";
+  const routineLevel = profile?.routine_level || "moderate";
+  const effectiveLevel = chairOnlyToday ? "easy" : routineLevel;
+
+  const exercises = useMemo(() => {
+    return getExerciseObjects(planType, dayIndex, effectiveLevel, chairOnlyToday);
+  }, [planType, dayIndex, effectiveLevel, chairOnlyToday]);
+
+  const totalMins = Math.round(
+    exercises.reduce((sum, ex) => sum + (ex.durationSecs || 0), 0) / 60
   );
 
-  const totalMins = Math.round(exercises.reduce((a, e) => a + e.durationSecs, 0) / 60);
+  const todayFocus = chairOnlyToday
+    ? "Chair-only recovery day"
+    : getTodayFocus(planType);
+
   const progressMsg = getProgressMessage(streak);
+  const streakReward = getStreakReward(streak);
 
-  // ── Mutations ────────────────────────────────────────────────────────────
-  const completeMutation = useMutation({
-    mutationFn: async () => {
-      const newScore = Math.min(100, (profile?.spine_score || 50) + 1);
+  const handleTooEasy = async () => {
+    if (!user?.id || !profile) return;
 
-      // Save today's check-in
-      if (todayCheckIn) {
-        await base44.entities.DailyCheckIn.update(todayCheckIn.id, { completed: true, spine_score: newScore });
-      } else {
-        await base44.entities.DailyCheckIn.create({ date: todayStr, completed: true, spine_score: newScore });
-      }
+    try {
+      const nextLevel = getNextHigherLevel(profile?.routine_level || "moderate");
 
-      // Compute real streak from dates (today now counts)
-      const newDatesSet = new Set([...completedDates, todayStr]);
-      let newStreak = 0;
-      let cur = new Date();
-      while (newDatesSet.has(format(cur, "yyyy-MM-dd"))) { newStreak++; cur = subDays(cur, 1); }
-      const longestStreak = Math.max(newStreak, profile?.longest_streak || 0);
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({
+          routine_level: nextLevel,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id)
+        .select()
+        .single();
 
-      if (profile) {
-        await base44.entities.UserProfile.update(profile.id, {
-          current_streak: newStreak,
-          longest_streak: longestStreak,
-          spine_score: newScore,
-        });
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["checkIns", user?.email] });
-      queryClient.invalidateQueries({ queryKey: ["userProfile", user?.email] });
-    },
-  });
+      if (error) throw error;
+      setProfile(data);
+    } catch (err) {
+      console.error("[Routine] too easy error:", err);
+    }
+  };
 
-  const handleWorkoutComplete = () => {
+  const handleTooHard = async () => {
+    if (!user?.id || !profile) return;
+
+    try {
+      const nextLevel = getNextLowerLevel(profile?.routine_level || "moderate");
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({
+          routine_level: nextLevel,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setProfile(data);
+    } catch (err) {
+      console.error("[Routine] too hard error:", err);
+    }
+  };
+
+  const handleChairOnly = () => {
+    setChairOnlyToday(true);
+  };
+
+  const handleWorkoutComplete = async () => {
+    if (routineCompleted) {
+      setSessionActive(false);
+      return;
+    }
+
     setSessionActive(false);
-    setTempLevelOverride(null); // Reset today-only override
-    completeMutation.mutate();
+    setRoutineCompleted(true);
+    setEarnedToday(streakReward);
+    setRewardPoints((prev) => prev + streakReward.points);
+
+    if (!user?.id || !profile) return;
+
+    try {
+      const previousConsistency = Number(profile?.consistency_score ?? 50);
+      const structuralScore = Number(profile?.structural_score ?? 50);
+      const previousMobility = Number(profile?.mobility_score ?? 50);
+      const previousStrength = Number(profile?.strength_score ?? 50);
+
+      const mobilityCount = exercises.filter(
+        (e) => e.category === "mobility"
+      ).length;
+
+      const strengthCount = exercises.filter(
+        (e) => e.category === "strength" || e.category === "stability"
+      ).length;
+
+      const newConsistency = Math.min(100, previousConsistency + 2);
+      const newMobility = Math.min(100, previousMobility + mobilityCount * 0.8);
+      const newStrength = Math.min(100, previousStrength + strengthCount * 0.8);
+
+      const newSpineScore = Math.round(
+        structuralScore * 0.4 +
+          newConsistency * 0.2 +
+          newMobility * 0.2 +
+          newStrength * 0.2
+      );
+
+      const newStreak = (profile?.current_streak || 0) + 1;
+      const newLongestStreak = Math.max(newStreak, profile?.longest_streak || 0);
+
+      let nextLevel = profile?.routine_level || "moderate";
+      if (newStreak % 7 === 0) {
+        nextLevel = getNextHigherLevel(nextLevel);
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({
+          consistency_score: Math.round(newConsistency),
+          mobility_score: Math.round(newMobility),
+          strength_score: Math.round(newStrength),
+          spine_score: newSpineScore,
+          current_streak: newStreak,
+          longest_streak: newLongestStreak,
+          routine_level: nextLevel,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setProfile(data);
+
+      setChairOnlyToday(false);
+
+      saveLocalJSON(STORAGE_KEYS.routineDayKey, todayKey);
+      saveLocalJSON(STORAGE_KEYS.lockedDayIndex, dayIndex);
+      saveLocalJSON(STORAGE_KEYS.completedDayKey, todayKey);
+    } catch (err) {
+      console.error("[Routine] complete error:", err);
+    }
   };
 
-  const handleLowerIntensity = () => setTempLevelOverride("easy");
-
-  const handleMakeHarder = () => {
-    const idx = LEVELS.indexOf(permanentLevelBoost || baseLevel);
-    const next = LEVELS[Math.min(idx + 1, LEVELS.length - 1)];
-    setPermanentLevelBoost(next);
-  };
-
-  const handleRestriction = (id) => {
-    setActiveRestrictions((prev) =>
-      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
     );
-  };
+  }
 
-  // ── Single exercise detail view ───────────────────────────────────────────
-  if (selectedExercise !== null) {
+  if (selectedExercise) {
     const selectedIndex = exercises.findIndex((e) => e.id === selectedExercise.id);
+
     return (
       <ExerciseDetailView
         exercise={exercises[selectedIndex] || exercises[0]}
@@ -159,12 +797,11 @@ export default function Routine() {
     );
   }
 
-  // ── Full session active → full screen ────────────────────────────────────
   if (sessionActive) {
     return (
       <WorkoutSession
         exercises={exercises}
-        dayOfPlan={dayOfPlan}
+        dayOfPlan={dayIndex + 1}
         streak={streak}
         onComplete={handleWorkoutComplete}
         onExit={() => setSessionActive(false)}
@@ -173,116 +810,200 @@ export default function Routine() {
   }
 
   return (
-    <div className="px-5 pt-12 pb-10">
+    <div className="px-4 pt-8 pb-28 max-w-lg mx-auto">
       <DailyAdjustSheet
         open={showAdjuster}
         onClose={() => setShowAdjuster(false)}
-        onLowerIntensity={handleLowerIntensity}
-        onMakeHarder={handleMakeHarder}
-        onRestriction={handleRestriction}
-        activeRestrictions={activeRestrictions}
+        onTooEasy={handleTooEasy}
+        onTooHard={handleTooHard}
+        onChairOnly={handleChairOnly}
+        currentLevel={routineLevel}
       />
 
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="flex items-start justify-between mb-1">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary">SpineLab Daily</p>
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-5"
+      >
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-1.5">
+              SpineLab Daily
+            </p>
+            <h1 className="text-3xl font-bold tracking-tight leading-tight">
+              Today’s Routine
+            </h1>
+          </div>
+
           <button
             onClick={() => setShowAdjuster(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors shrink-0"
           >
             <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
             <span className="text-xs font-semibold text-muted-foreground">Adjust</span>
           </button>
         </div>
 
-        <h1 className="text-2xl font-bold tracking-tight mb-1">Today's Routine</h1>
-
-        {/* Meta row */}
-        <div className="flex items-center gap-3 mb-4">
-          <span className="text-sm text-muted-foreground">
-            ~{totalMins} min · {exercises.length} exercises
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs font-semibold bg-secondary text-foreground/70 px-2.5 py-1 rounded-xl border border-border capitalize">
+            {chairOnlyToday ? "chair only" : routineLevel}
           </span>
+
+          <span className="text-xs font-semibold bg-secondary text-foreground/70 px-2.5 py-1 rounded-xl border border-border capitalize">
+            {planType.replace("_", " ")}
+          </span>
+
           {streak > 0 && (
-            <div className="flex items-center gap-1 bg-primary/10 rounded-full px-2.5 py-0.5">
-              <Flame className="w-3 h-3 text-primary" />
-              <span className="text-xs font-semibold text-primary">{streak}</span>
-            </div>
+            <span className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1 rounded-xl border border-primary/10">
+              <Flame className="w-3 h-3" />
+              {streak} day streak
+            </span>
           )}
+
+          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-xl border border-amber-200">
+            <Star className="w-3 h-3" />
+            {rewardPoints} pts
+          </span>
         </div>
 
-        {/* Day + level badges */}
-        <div className="flex items-center gap-2 mb-5">
-          <span className="text-xs font-semibold bg-secondary text-foreground/70 px-2.5 py-1 rounded-xl border border-border">
-            Day {dayOfPlan} of 7
-          </span>
-          <span className="text-xs font-semibold bg-secondary text-foreground/70 px-2.5 py-1 rounded-xl border border-border capitalize">
-            {seatedMode ? "Seated Mode" : effectiveLevel}
-          </span>
+        <div className="rounded-[28px] border border-border bg-card p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold mb-1">Today’s focus</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {todayFocus}. Small daily wins compound and improve your Spine Score over time.
+              </p>
+            </div>
+
+            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 text-primary" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            <div className="rounded-2xl bg-secondary/70 px-3 py-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">
+                Time
+              </p>
+              <p className="text-sm font-bold">~{totalMins} min</p>
+            </div>
+
+            <div className="rounded-2xl bg-secondary/70 px-3 py-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">
+                Moves
+              </p>
+              <p className="text-sm font-bold">{exercises.length}</p>
+            </div>
+
+            <div className="rounded-2xl bg-secondary/70 px-3 py-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">
+                Reward
+              </p>
+              <p className="text-sm font-bold">{streakReward.label}</p>
+            </div>
+          </div>
+
           {progressMsg && (
-            <span className="text-xs text-muted-foreground italic">{progressMsg}</span>
+            <div className="mt-4 flex items-start gap-2.5 rounded-2xl bg-primary/5 border border-primary/10 px-3 py-3">
+              <Trophy className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <p className="text-sm text-foreground/85">{progressMsg}</p>
+            </div>
           )}
         </div>
       </motion.div>
 
-      {/* Exercise preview list */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="space-y-2.5 mb-6"
+        transition={{ delay: 0.08 }}
+        className="space-y-3 mb-6"
       >
         {exercises.map((ex, i) => (
           <button
             key={ex.id}
             onClick={() => setSelectedExercise(ex)}
-            className="w-full flex items-center gap-3.5 bg-secondary/60 active:bg-secondary rounded-2xl px-4 py-3 transition-colors text-left"
+            className="w-full rounded-[26px] border border-border bg-card px-4 py-3.5 text-left hover:bg-secondary/40 active:scale-[0.995] transition-all"
           >
-            {/* Silhouette thumbnail */}
-            <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-background rounded-xl">
-              <ExerciseSilhouette type={ex.silhouette} className="w-8 h-8" />
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate">{ex.name}</p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${CATEGORY_COLORS[ex.category] || "bg-secondary text-muted-foreground"}`}>
-                  {ex.category}
-                </span>
-                <span className="text-[11px] text-muted-foreground">{ex.dosage}</span>
+            <div className="flex items-center gap-3">
+              <div className="w-16 h-16 shrink-0 rounded-2xl overflow-hidden border border-border bg-white dark:bg-slate-950">
+                <ExerciseMedia exercise={ex} className="w-full h-full" />
               </div>
-            </div>
 
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className="text-xs text-muted-foreground">
-                {ex.durationSecs < 60 ? `${ex.durationSecs}s` : `${Math.ceil(ex.durationSecs / 60)}m`}
-              </span>
-              <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="text-[10px] font-bold text-muted-foreground">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+
+                  <span
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                      CATEGORY_COLORS[ex.category] ||
+                      "bg-secondary text-muted-foreground border-border"
+                    }`}
+                  >
+                    {CATEGORY_LABELS[ex.category] || ex.category}
+                  </span>
+
+                  {i === 0 && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-sky-100 text-sky-700 border-sky-200">
+                      Start here
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-[15px] font-semibold leading-snug">{ex.name}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {ex.dosage || ex.instructions?.[0] || "Move slowly and stay controlled."}
+                </p>
+              </div>
+
+              <div className="text-right shrink-0">
+                <p className="text-xs font-semibold text-foreground/80">
+                  {formatDuration(ex.durationSecs)}
+                </p>
+                <ChevronRight className="w-4 h-4 text-muted-foreground/50 ml-auto mt-1.5" />
+              </div>
             </div>
           </button>
         ))}
       </motion.div>
 
-      <MedicalDisclaimer className="mb-6" />
+      <MedicalDisclaimer className="mb-5" />
 
-      {/* CTA */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-        {routineCompleted ? (
-          <div className="bg-primary/10 rounded-3xl p-6 text-center">
-            <Check className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="font-semibold">Today's routine done!</p>
-            <p className="text-sm text-muted-foreground">Great work. See you tomorrow.</p>
-          </div>
-        ) : (
-          <Button
-            onClick={() => setSessionActive(true)}
-            className="w-full h-16 rounded-2xl text-base font-bold gap-3 shadow-lg"
-          >
-            <Play className="w-5 h-5" />
-            Start Today's Routine
-          </Button>
-        )}
-      </motion.div>
+      {!showAdjuster && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+          className="sticky bottom-0 bg-background/95 backdrop-blur-sm pt-3"
+          style={{ paddingBottom: `max(10px, env(safe-area-inset-bottom, 10px))` }}
+        >
+          {routineCompleted ? (
+            <div className="bg-primary/10 rounded-3xl p-6 text-center border border-primary/10">
+              <Check className="w-8 h-8 text-primary mx-auto mb-2" />
+              <p className="font-semibold text-base">Today’s routine done!</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Great work. This routine will stay here until tomorrow.
+              </p>
+
+              {earnedToday && (
+                <p className="text-sm font-semibold text-primary mt-3">
+                  You earned {earnedToday.points} points.
+                </p>
+              )}
+            </div>
+          ) : (
+            <Button
+              onClick={() => setSessionActive(true)}
+              className="w-full h-16 rounded-2xl text-base font-bold gap-3 shadow-lg"
+              disabled={exercises.length === 0}
+            >
+              <Play className="w-5 h-5" />
+              Start Today’s Routine
+            </Button>
+          )}
+        </motion.div>
+      )}
     </div>
   );
 }

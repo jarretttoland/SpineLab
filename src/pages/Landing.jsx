@@ -1,54 +1,147 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import { ArrowRight, ShieldCheck, TrendingUp, Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const SpineIcon = () => (
   <svg viewBox="0 0 40 40" className="w-10 h-10" xmlns="http://www.w3.org/2000/svg" fill="white">
-    {/* Vertebrae stack */}
-    <rect x="15" y="4"  width="10" height="5" rx="2.5" opacity="0.9"/>
-    <rect x="13" y="11" width="14" height="5" rx="2.5"/>
-    <rect x="13" y="18" width="14" height="5" rx="2.5"/>
-    <rect x="13" y="25" width="14" height="5" rx="2.5"/>
-    <rect x="15" y="32" width="10" height="4" rx="2" opacity="0.9"/>
-    {/* Disc lines */}
-    <line x1="13" y1="10"  x2="27" y2="10"  stroke="white" strokeWidth="0.8" opacity="0.35"/>
-    <line x1="13" y1="17"  x2="27" y2="17"  stroke="white" strokeWidth="0.8" opacity="0.35"/>
-    <line x1="13" y1="24"  x2="27" y2="24"  stroke="white" strokeWidth="0.8" opacity="0.35"/>
-    <line x1="13" y1="31"  x2="27" y2="31"  stroke="white" strokeWidth="0.8" opacity="0.35"/>
+    <rect x="15" y="4" width="10" height="5" rx="2.5" opacity="0.9" />
+    <rect x="13" y="11" width="14" height="5" rx="2.5" />
+    <rect x="13" y="18" width="14" height="5" rx="2.5" />
+    <rect x="13" y="25" width="14" height="5" rx="2.5" />
+    <rect x="15" y="32" width="10" height="4" rx="2" opacity="0.9" />
+    <line x1="13" y1="10" x2="27" y2="10" stroke="white" strokeWidth="0.8" opacity="0.35" />
+    <line x1="13" y1="17" x2="27" y2="17" stroke="white" strokeWidth="0.8" opacity="0.35" />
+    <line x1="13" y1="24" x2="27" y2="24" stroke="white" strokeWidth="0.8" opacity="0.35" />
+    <line x1="13" y1="31" x2="27" y2="31" stroke="white" strokeWidth="0.8" opacity="0.35" />
+  </svg>
+);
+
+const GoogleIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+    <path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.79h5.4a4.61 4.61 0 0 1-2 3.02v2.5h3.24c1.9-1.75 3-4.33 3-7.31z" fill="#4285F4" />
+    <path d="M10 20c2.7 0 4.97-.9 6.62-2.46l-3.24-2.5a6.03 6.03 0 0 1-8.94-3.17H1.08v2.58A10 10 0 0 0 10 20z" fill="#34A853" />
+    <path d="M4.44 11.87A6.03 6.03 0 0 1 4.44 8.13V5.55H1.08a10 10 0 0 0 0 8.9l3.36-2.58z" fill="#FBBC05" />
+    <path d="M10 3.96a5.44 5.44 0 0 1 3.84 1.5l2.87-2.87A9.65 9.65 0 0 0 10 0 10 10 0 0 0 1.08 5.55l3.36 2.58A5.96 5.96 0 0 1 10 3.96z" fill="#EA4335" />
   </svg>
 );
 
 const FEATURES = [
   { icon: TrendingUp, label: "Spine Score tracking" },
-  { icon: Scan,       label: "AI Posture Analysis" },
+  { icon: Scan, label: "AI Posture Analysis" },
   { icon: ShieldCheck, label: "Personalised routines" },
 ];
 
-const GoogleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-    <path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.79h5.4a4.61 4.61 0 0 1-2 3.02v2.5h3.24c1.9-1.75 3-4.33 3-7.31z" fill="#4285F4"/>
-    <path d="M10 20c2.7 0 4.97-.9 6.62-2.46l-3.24-2.5a6.03 6.03 0 0 1-8.94-3.17H1.08v2.58A10 10 0 0 0 10 20z" fill="#34A853"/>
-    <path d="M4.44 11.87A6.03 6.03 0 0 1 4.44 8.13V5.55H1.08a10 10 0 0 0 0 8.9l3.36-2.58z" fill="#FBBC05"/>
-    <path d="M10 3.96a5.44 5.44 0 0 1 3.84 1.5l2.87-2.87A9.65 9.65 0 0 0 10 0 10 10 0 0 0 1.08 5.55l3.36 2.58A5.96 5.96 0 0 1 10 3.96z" fill="#EA4335"/>
-  </svg>
-);
+async function routeAfterAuth() {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-const AppleIcon = ({ className = "" }) => (
-  <svg width="18" height="22" viewBox="0 0 18 22" xmlns="http://www.w3.org/2000/svg" fill="currentColor" className={className}>
-    <path d="M14.95 11.55c-.02-2.23 1.82-3.3 1.9-3.36-1.04-1.52-2.65-1.73-3.22-1.75-1.37-.14-2.68.81-3.38.81-.7 0-1.78-.79-2.93-.77-1.5.02-2.89.88-3.66 2.22-1.57 2.72-.4 6.74 1.12 8.95.74 1.08 1.63 2.29 2.8 2.25 1.12-.05 1.55-.73 2.91-.73 1.36 0 1.74.73 2.93.71 1.21-.02 1.98-1.1 2.72-2.18.86-1.25 1.21-2.46 1.23-2.52-.03-.01-2.4-.92-2.42-3.63zM12.56 4.37C13.16 3.64 13.57 2.63 13.45 1.6c-.86.04-1.9.57-2.52 1.3-.55.64-1.04 1.67-.91 2.65.96.07 1.94-.48 2.54-1.18z"/>
-  </svg>
-);
+  if (userError) throw userError;
+  if (!user?.id) {
+    throw new Error("No authenticated user found.");
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, onboarding_complete")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError) throw profileError;
+
+  if (!profile) {
+    const { error: insertError } = await supabase.from("profiles").upsert(
+      {
+        id: user.id,
+        pain_areas: [],
+        secondary_pain: [],
+        secondary_goals: [],
+        scan_results: [],
+        onboarding_complete: false,
+        spine_score: 0,
+        structural_score: 0,
+        consistency_score: 50,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" }
+    );
+
+    if (insertError) throw insertError;
+
+    window.location.href = "/onboarding";
+    return;
+  }
+
+  if (profile.onboarding_complete) {
+    window.location.href = "/";
+  } else {
+    window.location.href = "/onboarding";
+  }
+}
 
 export default function Landing() {
-  const [screen, setScreen] = useState(null); // null | "signup" | "login"
+  const [screen, setScreen] = useState(null); // null | signup | login | email
+  const [emailMode, setEmailMode] = useState("login");
+  const [loadingGuest, setLoadingGuest] = useState(false);
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
 
-  const handleProvider = (provider) => base44.auth.loginWithProvider(provider, window.location.href);
-  const handleEmailAuth = () => base44.auth.redirectToLogin(window.location.href);
+  const handleGoogle = async () => {
+    try {
+      setLoadingGoogle(true);
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      });
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Google sign in error:", err.message);
+      alert(err.message);
+    } finally {
+      setLoadingGoogle(false);
+    }
+  };
+
+  const handleGuest = async () => {
+    try {
+      setLoadingGuest(true);
+
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) throw error;
+
+      localStorage.setItem("guest", "true");
+      await routeAfterAuth();
+    } catch (err) {
+      console.error("Guest sign in error:", err.message);
+      alert(err.message);
+    } finally {
+      setLoadingGuest(false);
+    }
+  };
+
+  const openEmailFromSignup = () => {
+    setEmailMode("signup");
+    setScreen("email");
+  };
+
+  const openEmailFromLogin = () => {
+    setEmailMode("login");
+    setScreen("email");
+  };
+
+  if (screen === "email") {
+    return <EmailAuthScreen mode={emailMode} onBack={() => setScreen(null)} />;
+  }
 
   if (screen === "signup" || screen === "login") {
     const isSignup = screen === "signup";
+
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <div className="flex-1 flex flex-col items-center justify-center px-6 pt-16 pb-6 text-center">
@@ -60,9 +153,11 @@ export default function Landing() {
             <div className="w-16 h-16 bg-primary rounded-[20px] flex items-center justify-center shadow-lg shadow-primary/25 mb-5">
               <SpineIcon />
             </div>
+
             <h1 className="text-2xl font-black tracking-tight text-foreground mb-1">
               {isSignup ? "Create your account" : "Welcome back"}
             </h1>
+
             <p className="text-sm text-muted-foreground">
               {isSignup ? "Start your SpineLab journey." : "Log in to continue your progress."}
             </p>
@@ -75,22 +170,17 @@ export default function Landing() {
           transition={{ delay: 0.1 }}
           className="px-6 pb-14 space-y-3"
         >
-          {/* Google */}
           <button
-            onClick={() => handleProvider("google")}
-            className="w-full h-14 rounded-2xl text-base font-semibold border border-border bg-card hover:bg-secondary transition-colors flex items-center justify-center gap-3"
+            onClick={handleGoogle}
+            disabled={loadingGoogle}
+            className="w-full h-14 rounded-2xl text-base font-semibold border border-border bg-card hover:bg-secondary transition-colors flex items-center justify-center gap-3 disabled:opacity-60"
           >
             <GoogleIcon />
-            {isSignup ? "Sign up with Google" : "Continue with Google"}
-          </button>
-
-          {/* Apple */}
-          <button
-            onClick={() => handleProvider("apple")}
-            className="w-full h-14 rounded-2xl text-base font-semibold bg-foreground text-background hover:opacity-90 transition-opacity flex items-center justify-center gap-3"
-          >
-            <AppleIcon />
-            {isSignup ? "Sign up with Apple" : "Continue with Apple"}
+            {loadingGoogle
+              ? "Loading..."
+              : isSignup
+              ? "Sign up with Google"
+              : "Continue with Google"}
           </button>
 
           <div className="flex items-center gap-3 py-1">
@@ -100,11 +190,11 @@ export default function Landing() {
           </div>
 
           <Button
-            onClick={handleEmailAuth}
+            onClick={isSignup ? openEmailFromSignup : openEmailFromLogin}
             variant="outline"
             className="w-full h-14 rounded-2xl text-base font-semibold border-border"
           >
-            Continue with Email
+            {isSignup ? "Sign up with Email" : "Continue with Email"}
           </Button>
 
           <button
@@ -120,11 +210,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-
-      {/* ── Hero ── */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 pt-20 pb-6 text-center">
-
-        {/* Logo block */}
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -134,13 +220,16 @@ export default function Landing() {
           <div className="w-20 h-20 bg-primary rounded-[22px] flex items-center justify-center shadow-lg shadow-primary/25 mb-5">
             <SpineIcon />
           </div>
-          <h1 className="text-3xl font-black tracking-tight text-foreground mb-1">Welcome to SpineLab</h1>
+
+          <h1 className="text-3xl font-black tracking-tight text-foreground mb-1">
+            Welcome to SpineLab
+          </h1>
+
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             Fix Your Spine. Track Your Progress.
           </p>
         </motion.div>
 
-        {/* Description */}
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -150,7 +239,6 @@ export default function Landing() {
           Create an account to start tracking your posture, or log in to continue where you left off.
         </motion.p>
 
-        {/* Feature list */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -168,7 +256,6 @@ export default function Landing() {
         </motion.div>
       </div>
 
-      {/* ── CTA ── */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -191,10 +278,112 @@ export default function Landing() {
           Log In — I have an account
         </Button>
 
+        <Button
+          onClick={handleGuest}
+          disabled={loadingGuest}
+          variant="secondary"
+          className="w-full h-14 rounded-2xl text-base font-semibold"
+        >
+          {loadingGuest ? "Loading..." : "Continue as Guest"}
+        </Button>
+
         <p className="text-center text-xs text-muted-foreground leading-relaxed pt-1">
           All progress is saved to your personal account.
         </p>
       </motion.div>
+    </div>
+  );
+}
+
+function EmailAuthScreen({ mode: initialMode, onBack }) {
+  const [mode, setMode] = useState(initialMode || "login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    try {
+      setLoading(true);
+
+      let result;
+
+      if (mode === "signup") {
+        result = await supabase.auth.signUp({
+          email,
+          password,
+        });
+      } else {
+        result = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+      }
+
+      if (result.error) throw result.error;
+
+      const sessionUser = result.data?.user ?? null;
+      const session = result.data?.session ?? null;
+
+      if (mode === "signup" && !session) {
+        alert("Account created. If email confirmation is enabled, please verify your email before logging in.");
+        onBack();
+        return;
+      }
+
+      if (!sessionUser) {
+        throw new Error("Login succeeded but no user session was found.");
+      }
+
+      await routeAfterAuth();
+    } catch (err) {
+      console.error(err.message);
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col bg-background">
+      <div className="flex-1 flex flex-col justify-center px-6 space-y-4">
+        <h1 className="text-2xl font-black text-foreground">
+          {mode === "signup" ? "Create account with email" : "Log in with email"}
+        </h1>
+
+        <input
+          className="w-full h-12 rounded-xl border border-border px-4 bg-background text-foreground"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoCapitalize="none"
+          autoCorrect="off"
+        />
+
+        <input
+          className="w-full h-12 rounded-xl border border-border px-4 bg-background text-foreground"
+          placeholder="Password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+
+        <Button onClick={submit} disabled={loading || !email || !password} className="w-full h-12 rounded-xl">
+          {loading ? "Loading..." : mode === "signup" ? "Create Account" : "Log In"}
+        </Button>
+
+        <button
+          onClick={() => setMode(mode === "signup" ? "login" : "signup")}
+          className="text-sm text-muted-foreground"
+        >
+          {mode === "signup"
+            ? "Already have an account? Log in"
+            : "Need an account? Sign up"}
+        </button>
+
+        <button onClick={onBack} className="text-sm text-muted-foreground">
+          ← Back
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,22 +1,25 @@
 /**
- * Side-agnostic posture analysis — handles left-facing or right-facing lateral scans.
+ * SpineLab — Side-agnostic posture analysis
  *
- * PIPELINE:
- * 1. Auto-detect which body side (left/right) has better landmark visibility.
- * 2. Use only that side for all measurements — eliminates sign-flipping bugs.
- * 3. Use absolute distances and body-relative ratios — works regardless of facing direction.
- * 4. Score each region independently (head/neck, shoulders, lumbar/pelvis).
- * 5. Reweight and cap final score based on abnormality severity.
- * 6. Return "Invalid pose" if landmarks too poor to score reliably.
+ * Goals:
+ * - Consistent and believable scoring
+ * - Mild issues stay mild
+ * - Obvious issues are picked up reliably
+ * - User-facing regions are simple:
+ *   1) Head / Neck
+ *   2) Shoulders / Thoracic
+ *   3) Lumbar / Pelvis
  */
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
 
 function angleDeg(A, B, C) {
-  const BAx = A.x - B.x, BAy = A.y - B.y;
-  const BCx = C.x - B.x, BCy = C.y - B.y;
+  const BAx = A.x - B.x;
+  const BAy = A.y - B.y;
+  const BCx = C.x - B.x;
+  const BCy = C.y - B.y;
   const dot = BAx * BCx + BAy * BCy;
   const mag = Math.sqrt((BAx * BAx + BAy * BAy) * (BCx * BCx + BCy * BCy));
   if (mag === 0) return 180;
@@ -24,37 +27,31 @@ function angleDeg(A, B, C) {
 }
 
 function distance(A, B) {
-  const dx = A.x - B.x, dy = A.y - B.y;
+  const dx = A.x - B.x;
+  const dy = A.y - B.y;
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-function tier(value, mild, moderate, severe) {
-  if (value >= severe)   return "severe";
-  if (value >= moderate) return "moderate";
-  if (value >= mild)     return "mild";
-  return "good";
+function toConfidenceLabel(conf) {
+  if (conf >= 0.7) return "high";
+  if (conf >= 0.45) return "moderate";
+  return "low";
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SIDE AUTO-DETECTION
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Choose best visible side (left or right) for lateral scoring.
- * Returns { side: "left" | "right", ear, shoulder, hip, confidence }
- * Throws "no_visible_side" if neither side viable.
- */
 function chooseBestSide(landmarks) {
-  const leftEar    = landmarks[7];  const rightEar    = landmarks[8];
-  const leftSho    = landmarks[11]; const rightSho    = landmarks[12];
-  const leftHip    = landmarks[23]; const rightHip    = landmarks[24];
+  const leftEar = landmarks[7];
+  const rightEar = landmarks[8];
+  const leftSho = landmarks[11];
+  const rightSho = landmarks[12];
+  const leftHip = landmarks[23];
+  const rightHip = landmarks[24];
 
   const getVis = (pt) => pt?.visibility ?? 0;
-  const leftScore  = getVis(leftEar) + getVis(leftSho) + getVis(leftHip);
+
+  const leftScore = getVis(leftEar) + getVis(leftSho) + getVis(leftHip);
   const rightScore = getVis(rightEar) + getVis(rightSho) + getVis(rightHip);
 
-  const MIN_TRIO_VIS = 0.50; // Combined visibility threshold
-  if (Math.max(leftScore, rightScore) < MIN_TRIO_VIS) {
+  if (Math.max(leftScore, rightScore) < 0.5) {
     throw new Error("no_visible_side");
   }
 
@@ -62,524 +59,562 @@ function chooseBestSide(landmarks) {
   const ear = side === "left" ? leftEar : rightEar;
   const shoulder = side === "left" ? leftSho : rightSho;
   const hip = side === "left" ? leftHip : rightHip;
+  const confidence = (side === "left" ? leftScore : rightScore) / 3;
 
-  const confidence = (side === "left" ? leftScore : rightScore) / 3; // avg visibility
   return { side, ear, shoulder, hip, confidence };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FORWARD HEAD SEVERITY
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Classify forward head posture using side-agnostic absolute distance.
- * Normalize by torso scale (shoulder-to-hip distance) for side consistency.
- *
- * Returns { severity, penalty, label, detail, confidence, headOffset }
- */
-function getForwardHeadSeverity(ear, shoulder, hip) {
+function getForwardHeadAssessment(ear, shoulder, hip) {
   if (!ear || !shoulder) {
-    return { severity: "invalid", penalty: 0, label: "Cannot score", detail: "", confidence: 0, headOffset: null };
+    return {
+      id: "forward_head",
+      severity: "invalid",
+      penalty: 0,
+      score: 0,
+      label: "Forward head not assessed",
+      detail: "Ear and shoulder were not both visible enough.",
+      confidence: 0,
+      metric: null,
+    };
   }
 
-  // Absolute horizontal distance from ear to shoulder
-  const headOffsetAbs = Math.abs(ear.x - shoulder.x);
-
-  // Normalize by torso height if hip available; otherwise use raw threshold
-  let normalizedOffset = headOffsetAbs;
-  if (hip && distance(shoulder, hip) > 0.01) {
-    const torsoHeight = distance(shoulder, hip);
-    normalizedOffset = headOffsetAbs / torsoHeight;
+  const conf = ((ear.visibility ?? 0.5) + (shoulder.visibility ?? 0.5)) / 2;
+  if (conf < 0.3) {
+    return {
+      id: "forward_head",
+      severity: "invalid",
+      penalty: 0,
+      score: 0,
+      label: "Forward head not assessed",
+      detail: "Low landmark confidence.",
+      confidence: conf,
+      metric: null,
+    };
   }
 
-  // Thresholds (very sensitive)
-  const t = tier(normalizedOffset, 0.06, 0.10, 0.15);
+  const offset = Math.abs(ear.x - shoulder.x);
+  const torsoHeight =
+    hip && distance(shoulder, hip) > 0.01 ? distance(shoulder, hip) : 1;
 
-  let label, detail, penalty, severity;
-  const MIN_CONF = 0.35;
-  const conf = Math.min(1, Math.max(0, (ear.visibility ?? 0.5) + (shoulder.visibility ?? 0.5)) / 2);
+  const normalizedOffset = offset / torsoHeight;
 
-  if (conf < MIN_CONF) {
-    return { severity: "invalid", penalty: 0, label: "Low confidence", detail: "", confidence: conf, headOffset: normalizedOffset };
-  }
+  // Calibrated to be less punitive:
+  // < 0.07 = good
+  // 0.07–0.11 = mild
+  // 0.11–0.16 = moderate
+  // > 0.16 = notable
+  let severity = "good";
+  let label = "Neutral head alignment";
+  let detail = "Ear is reasonably aligned over the shoulder.";
+  let penalty = 0;
+  let score = 96;
 
-  if (t === "severe") {
-    label = "Severe forward head posture";
-    detail = "Ear is significantly anterior to shoulder. This loads the cervical spine heavily.";
-    penalty = 30;
+  if (normalizedOffset >= 0.16) {
     severity = "notable";
-  } else if (t === "moderate") {
-    label = "Moderate forward head posture";
-    detail = "Clear forward shift of head. Increases cervical and upper back load.";
-    penalty = 20;
-    severity = "moderate";
-  } else if (t === "mild") {
-    label = "Mild forward head posture";
-    detail = "Slight forward head position. Even small drift accumulates strain over time.";
-    penalty = 12;
-    severity = "mild";
-  } else {
-    label = "Neutral head alignment";
-    detail = "Ear is well-aligned over shoulder.";
-    penalty = 0;
-    severity = "good";
-  }
-
-  return { severity, penalty, label, detail, confidence: conf, headOffset: normalizedOffset };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ROUNDED SHOULDERS / KYPHOSIS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Detect rounded shoulders (anterior shoulder protrusion).
- * Uses ear-to-shoulder horizontal distance relative to upper torso.
- */
-function getRoundedShouldersSeverity(ear, shoulder, hip) {
-  if (!ear || !shoulder) {
-    return { severity: "invalid", penalty: 0, label: "", detail: "", confidence: 0 };
-  }
-
-  // Shoulder protraction: how far anterior the shoulder is
-  // Approximate by ear-shoulder offset; if ear and shoulder are close horizontally, shoulder likely neutral
-  const earToShoX = Math.abs(ear.x - shoulder.x);
-
-  // If hip available, normalize by torso scale
-  let shRatio = earToShoX;
-  if (hip && distance(shoulder, hip) > 0.01) {
-    const torsoHeight = distance(shoulder, hip);
-    shRatio = earToShoX / torsoHeight;
-  }
-
-  // Thresholds
-  const t = tier(shRatio, 0.06, 0.12, 0.18);
-
-  let label, detail, penalty, severity;
-  const conf = Math.min(1, ((shoulder.visibility ?? 0.5) + (ear.visibility ?? 0.5)) / 2);
-
-  if (t === "severe") {
-    label = "Significant rounded shoulders";
-    detail = "Shoulders are clearly protracted forward, compressing the chest.";
+    label = "Notable forward head posture";
+    detail = "Head is clearly shifted forward relative to the shoulder.";
     penalty = 18;
-    severity = "notable";
-  } else if (t === "moderate") {
-    label = "Moderate rounded shoulders";
-    detail = "Noticeable forward shoulder position, common in desk workers.";
-    penalty = 12;
+    score = 62;
+  } else if (normalizedOffset >= 0.11) {
     severity = "moderate";
-  } else if (t === "mild") {
-    label = "Mild rounded shoulders";
-    detail = "Slight forward shoulder positioning.";
-    penalty = 6;
+    label = "Moderate forward head posture";
+    detail = "Head position is clearly forward and may increase neck strain.";
+    penalty = 10;
+    score = 78;
+  } else if (normalizedOffset >= 0.07) {
     severity = "mild";
-  } else {
-    label = "Neutral shoulder alignment";
-    detail = "";
-    penalty = 0;
-    severity = "good";
+    label = "Mild forward head posture";
+    detail = "Slight forward head position is present.";
+    penalty = 4;
+    score = 88;
   }
 
-  return { severity, penalty, label, detail, confidence: conf };
+  return {
+    id: "forward_head",
+    severity,
+    penalty,
+    score,
+    label,
+    detail,
+    confidence: conf,
+    metric: normalizedOffset,
+  };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// THORACIC KYPHOSIS
-// ─────────────────────────────────────────────────────────────────────────────
+function getRoundedShouldersAssessment(ear, shoulder, hip) {
+  if (!ear || !shoulder) {
+    return {
+      id: "rounded_shoulders",
+      severity: "invalid",
+      penalty: 0,
+      score: 0,
+      label: "Shoulder position not assessed",
+      detail: "",
+      confidence: 0,
+      metric: null,
+    };
+  }
 
-/**
- * Detect thoracic kyphosis using upper-back curvature.
- * Angle ear-shoulder-hip; smaller = more flexion = more kyphosis.
- */
-function getThoracicKyphosis(ear, shoulder, hip) {
+  const conf = ((ear.visibility ?? 0.5) + (shoulder.visibility ?? 0.5)) / 2;
+  if (conf < 0.3) {
+    return {
+      id: "rounded_shoulders",
+      severity: "invalid",
+      penalty: 0,
+      score: 0,
+      label: "Shoulder position not assessed",
+      detail: "",
+      confidence: conf,
+      metric: null,
+    };
+  }
+
+  const earToShoulderX = Math.abs(ear.x - shoulder.x);
+  const torsoHeight =
+    hip && distance(shoulder, hip) > 0.01 ? distance(shoulder, hip) : 1;
+
+  const ratio = earToShoulderX / torsoHeight;
+
+  let severity = "good";
+  let label = "Neutral shoulder alignment";
+  let detail = "";
+  let penalty = 0;
+  let score = 95;
+
+  if (ratio >= 0.18) {
+    severity = "notable";
+    label = "Notable rounded shoulders";
+    detail = "Shoulders appear clearly protracted forward.";
+    penalty = 12;
+    score = 66;
+  } else if (ratio >= 0.13) {
+    severity = "moderate";
+    label = "Moderate rounded shoulders";
+    detail = "Forward shoulder position is noticeable.";
+    penalty = 7;
+    score = 80;
+  } else if (ratio >= 0.09) {
+    severity = "mild";
+    label = "Mild rounded shoulders";
+    detail = "Slight forward shoulder positioning is present.";
+    penalty = 3;
+    score = 89;
+  }
+
+  return {
+    id: "rounded_shoulders",
+    severity,
+    penalty,
+    score,
+    label,
+    detail,
+    confidence: conf,
+    metric: ratio,
+  };
+}
+
+function getThoracicAssessment(ear, shoulder, hip) {
   if (!ear || !shoulder || !hip) {
-    return { severity: "invalid", penalty: 0, label: "", detail: "", confidence: 0 };
+    return {
+      id: "thoracic",
+      severity: "invalid",
+      penalty: 0,
+      score: 0,
+      label: "Thoracic posture not assessed",
+      detail: "",
+      confidence: 0,
+      metric: null,
+    };
+  }
+
+  const conf =
+    ((ear.visibility ?? 0.5) +
+      (shoulder.visibility ?? 0.5) +
+      (hip.visibility ?? 0.5)) /
+    3;
+
+  if (conf < 0.3) {
+    return {
+      id: "thoracic",
+      severity: "invalid",
+      penalty: 0,
+      score: 0,
+      label: "Thoracic posture not assessed",
+      detail: "",
+      confidence: conf,
+      metric: null,
+    };
   }
 
   const angle = angleDeg(ear, shoulder, hip);
-  const conf = Math.min(1, (ear.visibility ?? 0.5 + shoulder.visibility ?? 0.5 + hip.visibility ?? 0.5) / 3);
 
-  let label, detail, penalty, severity;
+  let severity = "good";
+  let label = "Neutral thoracic alignment";
+  let detail = "";
+  let penalty = 0;
+  let score = 95;
 
-  if (angle < 143) {
-    label = "Thoracic kyphosis pattern";
-    detail = "Significant upper back rounding detected.";
-    penalty = 18;
+  if (angle < 142) {
     severity = "notable";
-  } else if (angle < 153) {
-    label = "Moderate thoracic rounding";
-    detail = "Clear forward curve in upper back.";
+    label = "Notable thoracic rounding";
+    detail = "Upper back rounding is clearly present.";
     penalty = 12;
+    score = 64;
+  } else if (angle < 151) {
     severity = "moderate";
-  } else if (angle < 162) {
+    label = "Moderate thoracic rounding";
+    detail = "Upper back curve is moderately increased.";
+    penalty = 7;
+    score = 79;
+  } else if (angle < 159) {
+    severity = "mild";
     label = "Mild thoracic rounding";
-    detail = "Slight forward curve.";
-    penalty = 6;
-    severity = "mild";
-  } else {
-    label = "Neutral thoracic alignment";
-    detail = "";
-    penalty = 0;
-    severity = "good";
+    detail = "Slight upper back rounding is present.";
+    penalty = 3;
+    score = 89;
   }
 
-  return { severity, penalty, label, detail, confidence: conf };
+  return {
+    id: "thoracic",
+    severity,
+    penalty,
+    score,
+    label,
+    detail,
+    confidence: conf,
+    metric: angle,
+  };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LUMBAR CLASSIFICATION (Flexion vs Lordosis)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Distinguish lumbar flexion from lordosis using shoulder-hip-knee angles.
- * Extended posture → lordosis. Flexed posture → lumbar flexion.
- */
-function getLumbarClassification(shoulder, hip, knee) {
+function getLumbarAssessment(shoulder, hip, knee) {
   if (!shoulder || !hip || !knee) {
-    return { severity: "invalid", penalty: 0, label: "", detail: "", confidence: 0 };
+    return {
+      id: "lumbar",
+      severity: "invalid",
+      penalty: 0,
+      score: 0,
+      label: "Lumbar posture not assessed",
+      detail: "",
+      confidence: 0,
+      metric: null,
+    };
   }
 
-  const lumbarAngle = angleDeg(shoulder, hip, knee);
-  const conf = Math.min(1, (shoulder.visibility ?? 0.5 + hip.visibility ?? 0.5 + knee.visibility ?? 0.5) / 3);
+  const conf =
+    ((shoulder.visibility ?? 0.5) +
+      (hip.visibility ?? 0.5) +
+      (knee.visibility ?? 0.5)) /
+    3;
 
-  let label, detail, penalty, severity;
+  if (conf < 0.3) {
+    return {
+      id: "lumbar",
+      severity: "invalid",
+      penalty: 0,
+      score: 0,
+      label: "Lumbar posture not assessed",
+      detail: "",
+      confidence: conf,
+      metric: null,
+    };
+  }
 
-  // Higher angle = more extended (lordosis). Lower angle = more flexed (slouch).
-  if (lumbarAngle > 172) {
-    // Extended, likely lordosis or sway
-    label = "Lumbar lordosis tendency";
-    detail = "Upper-to-lower trunk shows extension (backward arch). May indicate anterior pelvic tilt.";
-    penalty = 10;
-    severity = "mild";
-  } else if (lumbarAngle > 165) {
-    label = "Neutral lumbar alignment";
-    detail = "";
-    penalty = 0;
-    severity = "good";
-  } else if (lumbarAngle > 155) {
-    label = "Mild lumbar flexion";
-    detail = "Slight slouch/flexion tendency in lower back.";
-    penalty = 8;
-    severity = "mild";
-  } else if (lumbarAngle > 145) {
-    label = "Moderate lumbar flexion";
-    detail = "Clear forward bend at hip/lumbar level.";
-    penalty = 16;
-    severity = "moderate";
-  } else {
-    label = "Lumbar flexion pattern";
-    detail = "Significant forward bend; lumbar spine is heavily flexed.";
-    penalty = 25;
+  const angle = angleDeg(shoulder, hip, knee);
+
+  let severity = "good";
+  let label = "Neutral lumbar alignment";
+  let detail = "";
+  let penalty = 0;
+  let score = 95;
+
+  // More conservative / less dramatic:
+  if (angle < 145) {
     severity = "notable";
+    label = "Notable lumbar flexion pattern";
+    detail = "Lower back / hip alignment shows a clear flexion bias.";
+    penalty = 12;
+    score = 64;
+  } else if (angle < 154) {
+    severity = "moderate";
+    label = "Moderate lumbar flexion";
+    detail = "There is a noticeable lower back flexion tendency.";
+    penalty = 7;
+    score = 79;
+  } else if (angle < 162) {
+    severity = "mild";
+    label = "Mild lumbar flexion";
+    detail = "A slight lower back flexion tendency is present.";
+    penalty = 3;
+    score = 89;
+  } else if (angle > 176) {
+    severity = "mild";
+    label = "Mild lumbar lordosis tendency";
+    detail = "A slight extension / arch tendency is present.";
+    penalty = 3;
+    score = 89;
   }
 
-  return { severity, penalty, label, detail, confidence: conf };
+  return {
+    id: "lumbar",
+    severity,
+    penalty,
+    score,
+    label,
+    detail,
+    confidence: conf,
+    metric: angle,
+  };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PELVIC ALIGNMENT
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Detect anterior/posterior pelvic shift using hip-to-ankle relationship.
- */
-function getPelvicAlignment(hip, ankle, shoulder) {
+function getPelvicAssessment(hip, ankle, shoulder) {
   if (!hip || !ankle) {
-    return { severity: "invalid", penalty: 0, label: "", detail: "", confidence: 0 };
+    return {
+      id: "pelvis",
+      severity: "invalid",
+      penalty: 0,
+      score: 0,
+      label: "Pelvic alignment not assessed",
+      detail: "",
+      confidence: 0,
+      metric: null,
+    };
+  }
+
+  const conf = ((hip.visibility ?? 0.5) + (ankle.visibility ?? 0.5)) / 2;
+  if (conf < 0.3) {
+    return {
+      id: "pelvis",
+      severity: "invalid",
+      penalty: 0,
+      score: 0,
+      label: "Pelvic alignment not assessed",
+      detail: "",
+      confidence: conf,
+      metric: null,
+    };
   }
 
   const hipAnkleDist = Math.abs(hip.x - ankle.x);
-  let ratio = hipAnkleDist;
-  if (shoulder && distance(hip, ankle) > 0.01) {
-    const bodyHeight = distance(hip, ankle);
-    ratio = hipAnkleDist / bodyHeight;
-  }
+  const bodyHeight =
+    shoulder && distance(hip, ankle) > 0.01 ? distance(hip, ankle) : 1;
+  const ratio = hipAnkleDist / bodyHeight;
 
-  const conf = Math.min(1, ((hip.visibility ?? 0.5) + (ankle.visibility ?? 0.5)) / 2);
+  let severity = "good";
+  let label = "Neutral pelvic alignment";
+  let detail = "";
+  let penalty = 0;
+  let score = 95;
 
-  let label, detail, penalty, severity;
-  const t = tier(ratio, 0.04, 0.09, 0.15);
-
-  if (t === "severe") {
-    label = "Significant pelvic shift";
-    detail = "Hips are clearly displaced from ankle plumb line.";
-    penalty = 16;
+  if (ratio >= 0.15) {
     severity = "notable";
-  } else if (t === "moderate") {
-    label = "Moderate pelvic shift";
-    detail = "Noticeable hip displacement.";
+    label = "Notable pelvic shift";
+    detail = "Hip alignment is clearly displaced relative to the ankle.";
     penalty = 10;
+    score = 68;
+  } else if (ratio >= 0.10) {
     severity = "moderate";
-  } else if (t === "mild") {
-    label = "Mild pelvic lean";
-    detail = "Minor hip displacement.";
-    penalty = 5;
+    label = "Moderate pelvic shift";
+    detail = "Hip alignment is noticeably displaced.";
+    penalty = 6;
+    score = 82;
+  } else if (ratio >= 0.06) {
     severity = "mild";
-  } else {
-    label = "Neutral pelvic alignment";
-    detail = "";
-    penalty = 0;
-    severity = "good";
+    label = "Mild pelvic shift";
+    detail = "A slight hip shift is present.";
+    penalty = 3;
+    score = 90;
   }
 
-  return { severity, penalty, label, detail, confidence: conf };
+  return {
+    id: "pelvis",
+    severity,
+    penalty,
+    score,
+    label,
+    detail,
+    confidence: conf,
+    metric: ratio,
+  };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN POSTURE ANALYSIS
-// ─────────────────────────────────────────────────────────────────────────────
+function severityRank(severity) {
+  if (severity === "notable") return 3;
+  if (severity === "moderate") return 2;
+  if (severity === "mild") return 1;
+  return 0;
+}
 
 export function analyzePosture(kl, imgW = 1, imgH = 1.5, debug = false) {
-  // Auto-detect best visible side
-  let chosenSide, ear, shoulder, hip, knee, ankle;
+  let chosenSide;
+  let ear;
+  let shoulder;
+  let hip;
+  let knee;
+  let ankle;
+
   try {
     const sidePick = chooseBestSide([
-      kl.ear?.visibility ? null : null, // 0-6 unused
-      null, null, null, null, null, null,
-      kl.ear,      // 7: left ear
-      { x: 0, y: 0, visibility: 0 }, // 8: right ear (unused)
+      null, null, null, null, null, null, null,
+      kl.ear,
+      { x: 0, y: 0, visibility: 0 },
       null, null,
-      kl.shoulder, // 11: left shoulder
-      { x: 0, y: 0, visibility: 0 }, // 12: right shoulder (unused)
+      kl.shoulder,
+      { x: 0, y: 0, visibility: 0 },
       null, null, null, null, null, null, null, null, null, null, null,
-      kl.hip,      // 23: left hip
-      { x: 0, y: 0, visibility: 0 }, // 24: right hip (unused)
-      kl.knee,     // 25: left knee
-      { x: 0, y: 0, visibility: 0 }, // 26: right knee (unused)
-      kl.ankle,    // 27: left ankle
-      { x: 0, y: 0, visibility: 0 }, // 28: right ankle (unused)
+      kl.hip,
+      { x: 0, y: 0, visibility: 0 },
+      kl.knee,
+      { x: 0, y: 0, visibility: 0 },
+      kl.ankle,
+      { x: 0, y: 0, visibility: 0 },
     ]);
-    // If we got here, use the chosen side
+
     chosenSide = sidePick.side;
     ear = kl.ear;
     shoulder = kl.shoulder;
     hip = kl.hip;
     knee = kl.knee;
     ankle = kl.ankle;
-  } catch (e) {
-    // No visible side — return invalid
+  } catch (_e) {
     return {
-      findings: [{
-        id: "posture_invalid",
-        label: "Invalid pose — no score",
-        detail: "Landmarks not clearly visible. Please retake with your full side profile visible.",
-        confidence: "low",
-        severity: "invalid",
-      }],
+      findings: [
+        {
+          id: "posture_invalid",
+          label: "Invalid pose — no score",
+          detail:
+            "Landmarks were not visible enough. Retake with a clear side profile and better framing.",
+          confidence: "low",
+          severity: "invalid",
+        },
+      ],
       overallScore: 0,
-      summary: "Could not analyze posture — landmarks insufficient.",
+      summary: "Could not analyze posture from this image.",
       pattern: "Invalid pose",
-      subscores: { headNeck: 0, shoulderThoracic: 0, lumbarPelvis: 0 },
+      subscores: {
+        headNeck: 0,
+        shoulderThoracic: 0,
+        lumbarPelvis: 0,
+      },
     };
   }
 
-  const findings = [];
-  let totalPenalty = 0;
-  const penaltyLog = [];
+  const forwardHead = getForwardHeadAssessment(ear, shoulder, hip);
+  const roundedShoulders = getRoundedShouldersAssessment(ear, shoulder, hip);
+  const thoracic = getThoracicAssessment(ear, shoulder, hip);
+  const lumbar = getLumbarAssessment(shoulder, hip, knee);
+  const pelvis = getPelvicAssessment(hip, ankle, shoulder);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SEGMENT 1: Forward Head
-  // ─────────────────────────────────────────────────────────────────────────
-  const fhp = getForwardHeadSeverity(ear, shoulder, hip);
-  if (fhp.severity !== "invalid") {
-    findings.push({
-      id: "forward_head",
-      label: fhp.label,
-      detail: fhp.detail,
-      confidence: fhp.confidence >= 0.35 ? "high" : fhp.confidence >= 0.2 ? "moderate" : "low",
-      severity: fhp.severity,
-    });
-    if (fhp.penalty > 0) {
-      penaltyLog.push({ id: "forward_head", label: fhp.label, penalty: fhp.penalty });
-      totalPenalty += fhp.penalty;
-    }
-  }
+  const rawAssessments = [forwardHead, roundedShoulders, thoracic, lumbar, pelvis];
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SEGMENT 2: Rounded Shoulders
-  // ─────────────────────────────────────────────────────────────────────────
-  const rsh = getRoundedShouldersSeverity(ear, shoulder, hip);
-  if (rsh.severity !== "invalid") {
-    findings.push({
-      id: "rounded_shoulders",
-      label: rsh.label,
-      detail: rsh.detail,
-      confidence: rsh.confidence >= 0.35 ? "high" : "moderate",
-      severity: rsh.severity,
-    });
-    if (rsh.penalty > 0) {
-      penaltyLog.push({ id: "rounded_shoulders", label: rsh.label, penalty: rsh.penalty });
-      totalPenalty += rsh.penalty;
-    }
-  }
+  const findings = rawAssessments
+    .filter((a) => a.severity !== "invalid")
+    .map((a) => ({
+      id: a.id,
+      label: a.label,
+      detail: a.detail,
+      confidence: toConfidenceLabel(a.confidence),
+      severity: a.severity,
+    }));
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SEGMENT 3: Thoracic Kyphosis
-  // ─────────────────────────────────────────────────────────────────────────
-  const thk = getThoracicKyphosis(ear, shoulder, hip);
-  if (thk.severity !== "invalid") {
-    findings.push({
-      id: "thoracic",
-      label: thk.label,
-      detail: thk.detail,
-      confidence: thk.confidence >= 0.4 ? "high" : "moderate",
-      severity: thk.severity,
-    });
-    if (thk.penalty > 0) {
-      penaltyLog.push({ id: "thoracic", label: thk.label, penalty: thk.penalty });
-      totalPenalty += thk.penalty;
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // SEGMENT 4: Lumbar Classification
-  // ─────────────────────────────────────────────────────────────────────────
-  let lum = { severity: "invalid", penalty: 0, label: "", detail: "", confidence: 0 };
-  if (hip && knee) {
-    lum = getLumbarClassification(shoulder, hip, knee);
-    if (lum.severity !== "invalid") {
-      findings.push({
-        id: "lumbar",
-        label: lum.label,
-        detail: lum.detail,
-        confidence: lum.confidence >= 0.4 ? "high" : "moderate",
-        severity: lum.severity,
-      });
-      if (lum.penalty > 0) {
-        penaltyLog.push({ id: "lumbar", label: lum.label, penalty: lum.penalty });
-        totalPenalty += lum.penalty;
-      }
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // SEGMENT 5: Pelvic Alignment
-  // ─────────────────────────────────────────────────────────────────────────
-  let pel = { severity: "invalid", penalty: 0, label: "", detail: "", confidence: 0 };
-  if (hip && ankle) {
-    pel = getPelvicAlignment(hip, ankle, shoulder);
-    if (pel.severity !== "invalid") {
-      findings.push({
-        id: "pelvis",
-        label: pel.label,
-        detail: pel.detail,
-        confidence: pel.confidence >= 0.35 ? "high" : "moderate",
-        severity: pel.severity,
-      });
-      if (pel.penalty > 0) {
-        penaltyLog.push({ id: "pelvis", label: pel.label, penalty: pel.penalty });
-        totalPenalty += pel.penalty;
-      }
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // REGIONAL SCORES (before final weighting)
-  // ─────────────────────────────────────────────────────────────────────────
-  const headScore = Math.max(0, Math.min(100,
-    fhp.severity === "good" ? 100 : fhp.severity === "mild" ? 88 : fhp.severity === "moderate" ? 80 : 72
-  ));
-
-  const shoulderScore = Math.max(0, Math.min(100,
-    rsh.severity === "good" && thk.severity === "good" ? 100 :
-    rsh.severity === "mild" || thk.severity === "mild" ? 90 :
-    rsh.severity === "moderate" || thk.severity === "moderate" ? 78 : 65
-  ));
-
-  const lumbarScore = Math.max(0, Math.min(100,
-    lum.severity === "invalid" ? 100 : // no data = neutral
-    lum.severity === "good" ? 98 :
-    lum.severity === "mild" ? 88 :
-    lum.severity === "moderate" ? 76 : 65
-  ));
-
-  const pelvisScore = Math.max(0, Math.min(100,
-    pel.severity === "invalid" ? 100 : // no data = neutral
-    pel.severity === "good" ? 98 :
-    pel.severity === "mild" ? 88 :
-    pel.severity === "moderate" ? 76 : 65
-  ));
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // FINAL SCORE — weighted regional average
-  // ─────────────────────────────────────────────────────────────────────────
-  const headWeight     = 0.40;
-  const shoulderWeight = 0.25;
-  const lumbarWeight   = 0.35;
-
-  let overallScore = Math.round(
-    headScore * headWeight +
-    shoulderScore * shoulderWeight +
-    (lumbarScore + pelvisScore) / 2 * lumbarWeight
+  const activeIssues = findings.filter(
+    (f) => f.severity !== "good" && f.severity !== "invalid"
   );
-  overallScore = Math.max(0, Math.min(100, overallScore));
 
-  // Hard caps based on severity
-  const worstSeverity = findings
-    .filter((f) => f.severity !== "good" && f.severity !== "invalid")
-    .sort((a, b) => ({ notable: 3, moderate: 2, mild: 1, good: 0 }[b.severity] ?? 0) - ({ notable: 3, moderate: 2, mild: 1, good: 0 }[a.severity] ?? 0))[0]?.severity;
+  // Region scores
+  const headNeck = clamp(forwardHead.severity === "invalid" ? 90 : forwardHead.score, 0, 100);
 
-  if (worstSeverity === "notable") overallScore = Math.min(overallScore, 72);
-  if (worstSeverity === "moderate") overallScore = Math.min(overallScore, 82);
+  const shoulderThoracic = clamp(
+    Math.round(
+      ((roundedShoulders.severity === "invalid" ? 92 : roundedShoulders.score) +
+        (thoracic.severity === "invalid" ? 92 : thoracic.score)) / 2
+    ),
+    0,
+    100
+  );
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PATTERN CLASSIFICATION
-  // ─────────────────────────────────────────────────────────────────────────
-  const activeIssues = findings.filter((f) => f.severity !== "good" && f.severity !== "invalid");
-  const issueLabels = activeIssues.map((f) => f.label);
+  const lumbarPelvis = clamp(
+    Math.round(
+      ((lumbar.severity === "invalid" ? 92 : lumbar.score) +
+        (pelvis.severity === "invalid" ? 92 : pelvis.score)) / 2
+    ),
+    0,
+    100
+  );
 
-  let pattern;
-  if (activeIssues.length === 0) {
-    pattern = "Neutral alignment";
-  } else if (issueLabels.some((l) => l.includes("forward head"))) {
-    pattern = "Forward head posture";
-    if (issueLabels.some((l) => l.includes("shoulder"))) pattern += " + rounded shoulders";
-  } else if (issueLabels.some((l) => l.includes("kyphosis"))) {
-    pattern = "Thoracic kyphosis";
-  } else if (issueLabels.some((l) => l.includes("lumbar"))) {
-    pattern = issueLabels.find((l) => l.includes("lumbar"));
-  } else {
-    pattern = activeIssues.length > 1 ? "Mixed pattern" : issueLabels[0];
+  // Final scan score for posture-only use
+  let overallScore = Math.round(
+    headNeck * 0.38 +
+      shoulderThoracic * 0.27 +
+      lumbarPelvis * 0.35
+  );
+
+  const worstSeverity = activeIssues
+    .map((f) => f.severity)
+    .sort((a, b) => severityRank(b) - severityRank(a))[0];
+
+  // Keep score believable if there are obvious issues
+  if (worstSeverity === "notable") overallScore = Math.min(overallScore, 74);
+  else if (worstSeverity === "moderate") overallScore = Math.min(overallScore, 84);
+
+  overallScore = clamp(overallScore, 0, 100);
+
+  let pattern = "Neutral alignment";
+
+  if (activeIssues.length > 0) {
+    const ids = activeIssues.map((f) => f.id);
+
+    if (ids.includes("forward_head") && ids.includes("rounded_shoulders")) {
+      pattern = "Forward head + rounded shoulders";
+    } else if (ids.includes("forward_head")) {
+      pattern = "Forward head posture";
+    } else if (ids.includes("thoracic")) {
+      pattern = "Thoracic rounding";
+    } else if (ids.includes("lumbar")) {
+      pattern = "Lumbar pattern";
+    } else if (ids.includes("pelvis")) {
+      pattern = "Pelvic shift pattern";
+    } else {
+      pattern = "Mixed posture pattern";
+    }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SUMMARY
-  // ─────────────────────────────────────────────────────────────────────────
-  const notableCount = activeIssues.filter((f) => f.severity === "notable" || f.severity === "moderate").length;
-  let summary;
+  let summary = "Excellent posture alignment in this photo.";
+
+  const notableCount = activeIssues.filter((f) => f.severity === "notable").length;
+  const moderateCount = activeIssues.filter((f) => f.severity === "moderate").length;
+
   if (activeIssues.length === 0) {
-    summary = "Excellent posture alignment in this photo. Keep up the good habits.";
+    summary = "Excellent posture alignment in this photo.";
   } else if (notableCount >= 2) {
-    summary = "Multiple notable postural deviations detected. Consistent daily exercise targeting these areas is key.";
-  } else if (notableCount === 1) {
-    summary = "One notable postural tendency detected. Your exercises target this pattern.";
+    summary =
+      "Multiple clear postural deviations were detected. Consistent practice can improve this over time.";
+  } else if (notableCount === 1 || moderateCount >= 2) {
+    summary =
+      "A meaningful postural tendency was detected. Daily exercises should target this area.";
   } else {
-    summary = "Mild postural tendencies present. Keep up with your daily exercises to improve alignment.";
+    summary =
+      "Mild postural tendencies were detected. These are common and often improve with consistent movement.";
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // DEBUG
-  // ─────────────────────────────────────────────────────────────────────────
-  const debugInfo = debug ? {
-    chosenSide,
-    fhpDebug: {
-      earX: ear?.x.toFixed(4),
-      shoulderX: shoulder?.x.toFixed(4),
-      headOffset: fhp.headOffset?.toFixed(4),
-      fhpSeverity: fhp.severity,
-      fhpPenalty: fhp.penalty,
-    },
-    measurements: {
-      rshSeverity: rsh.severity,
-      thkSeverity: thk.severity,
-      lumbarSeverity: lum.severity,
-      pelvisSeverity: pel.severity,
-    },
-    regionalScores: { headScore, shoulderScore, lumbarScore, pelvisScore },
-    penaltyLog,
-    totalPenalty,
-    finalScore: overallScore,
-  } : undefined;
+  const debugInfo = debug
+    ? {
+        chosenSide,
+        metrics: {
+          forwardHead: forwardHead.metric,
+          roundedShoulders: roundedShoulders.metric,
+          thoracicAngle: thoracic.metric,
+          lumbarAngle: lumbar.metric,
+          pelvicShift: pelvis.metric,
+        },
+        regionalScores: {
+          headNeck,
+          shoulderThoracic,
+          lumbarPelvis,
+        },
+        rawAssessments,
+        overallScore,
+      }
+    : undefined;
 
   return {
     findings,
@@ -587,22 +622,22 @@ export function analyzePosture(kl, imgW = 1, imgH = 1.5, debug = false) {
     summary,
     pattern,
     subscores: {
-      headNeck: headScore,
-      shoulderThoracic: shoulderScore,
-      lumbarPelvis: Math.round((lumbarScore + pelvisScore) / 2),
+      headNeck,
+      shoulderThoracic,
+      lumbarPelvis,
     },
     ...(debug ? { debug: debugInfo } : {}),
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// TREND COMPARISON
-// ─────────────────────────────────────────────────────────────────────────
 export function compareTrend(currentFindings, previousFindings) {
   if (!previousFindings || previousFindings.length === 0) return null;
-  const w = { good: 0, mild: 1, moderate: 2, notable: 3 };
-  const score = (f) => f.reduce((s, x) => s + (w[x.severity] ?? 0), 0);
-  const delta = score(currentFindings) - score(previousFindings);
+
+  const scoreSet = (items) =>
+    items.reduce((sum, item) => sum + severityRank(item.severity), 0);
+
+  const delta = scoreSet(currentFindings) - scoreSet(previousFindings);
+
   if (delta <= -2) return "Improved compared to last scan";
   if (delta >= 2) return "Increase in postural tendencies vs. last scan";
   return "No major change from last scan";
