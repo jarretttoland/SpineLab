@@ -7,6 +7,8 @@ import {
   Route,
   Routes,
 } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
+
 import PageNotFound from "./lib/PageNotFound";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import Landing from "./pages/Landing";
@@ -73,6 +75,7 @@ export default function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <AppRoutes />
+          <Analytics />
         </Router>
         <Toaster />
       </QueryClientProvider>
