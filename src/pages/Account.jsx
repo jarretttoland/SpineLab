@@ -186,7 +186,10 @@ export default function Account() {
       const resetPayload = {
         onboarding_complete: false,
         spine_score: 0,
+        posture_score: 0,
         consistency_score: 0,
+        mobility_score: 0,
+        strength_score: 0,
         current_streak: 0,
         longest_streak: 0,
         plan_type: null,
@@ -229,19 +232,11 @@ export default function Account() {
     try {
       setDeleting(true);
 
-      const { error: scansError } = await supabase
-        .from("posture_scans")
-        .delete()
-        .eq("user_id", user.id);
+      const { error } = await supabase.functions.invoke("delete-account", {
+        body: {},
+      });
 
-      if (scansError) throw scansError;
-
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", user.id);
-
-      if (profileError) throw profileError;
+      if (error) throw error;
 
       clearLocalProgress();
       await supabase.auth.signOut();
