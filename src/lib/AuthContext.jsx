@@ -3,12 +3,14 @@ import { supabase } from "@/lib/supabase";
 
 const AuthContext = createContext(null);
 
-function hasGuestSession() {
-  try {
-    return localStorage.getItem("guest") === "true";
-  } catch {
-    return false;
-  }
+function getIsAnonymousUser(user) {
+  if (!user) return false;
+
+  return (
+    user.is_anonymous === true ||
+    user.app_metadata?.provider === "anonymous" ||
+    user.app_metadata?.providers?.includes?.("anonymous")
+  );
 }
 
 export const AuthProvider = ({ children }) => {
@@ -36,30 +38,18 @@ export const AuthProvider = ({ children }) => {
 
         if (error) {
           console.error("[AuthContext] getSession error:", error.message);
-
-          const guestActive = hasGuestSession();
           setUser(null);
-          setIsGuest(guestActive);
-          setIsAuthenticated(guestActive);
-          setAuthError(
-            guestActive
-              ? null
-              : { type: "auth_required", message: error.message }
-          );
+          setIsGuest(false);
+          setIsAuthenticated(false);
+          setAuthError({ type: "auth_required", message: error.message });
           return;
         }
 
         const sessionUser = session?.user ?? null;
-        const guestActive = hasGuestSession();
 
         if (sessionUser) {
           setUser(sessionUser);
-          setIsGuest(false);
-          setIsAuthenticated(true);
-          setAuthError(null);
-        } else if (guestActive) {
-          setUser(null);
-          setIsGuest(true);
+          setIsGuest(getIsAnonymousUser(sessionUser));
           setIsAuthenticated(true);
           setAuthError(null);
         } else {
@@ -75,18 +65,13 @@ export const AuthProvider = ({ children }) => {
         console.error("[AuthContext] loadSession error:", err);
         if (!mounted) return;
 
-        const guestActive = hasGuestSession();
         setUser(null);
-        setIsGuest(guestActive);
-        setIsAuthenticated(guestActive);
-        setAuthError(
-          guestActive
-            ? null
-            : {
-                type: "auth_required",
-                message: err?.message || "Authentication required",
-              }
-        );
+        setIsGuest(false);
+        setIsAuthenticated(false);
+        setAuthError({
+          type: "auth_required",
+          message: err?.message || "Authentication required",
+        });
       } finally {
         if (mounted) {
           setIsLoadingAuth(false);
@@ -100,16 +85,10 @@ export const AuthProvider = ({ children }) => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       const sessionUser = session?.user ?? null;
-      const guestActive = hasGuestSession();
 
       if (sessionUser) {
         setUser(sessionUser);
-        setIsGuest(false);
-        setIsAuthenticated(true);
-        setAuthError(null);
-      } else if (guestActive) {
-        setUser(null);
-        setIsGuest(true);
+        setIsGuest(getIsAnonymousUser(sessionUser));
         setIsAuthenticated(true);
         setAuthError(null);
       } else {
@@ -131,22 +110,29 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  const startGuestSession = () => {
-    try {
-      localStorage.setItem("guest", "true");
-    } catch {
-      // ignore
+  const startGuestSession = async () => {
+    const { data, error } = await supabase.auth.signInAnonymously();
+
+    if (error) {
+      throw error;
     }
 
-    setUser(null);
+    const anonUser = data?.user ?? null;
+
+    if (!anonUser) {
+      throw new Error("Anonymous sign-in succeeded but no user was returned.");
+    }
+
+    setUser(anonUser);
     setIsGuest(true);
     setIsAuthenticated(true);
     setAuthError(null);
+
+    return anonUser;
   };
 
   const logout = async () => {
     try {
-      localStorage.removeItem("guest");
       await supabase.auth.signOut();
     } catch (err) {
       console.error("[AuthContext] logout error:", err);
@@ -166,16 +152,10 @@ export const AuthProvider = ({ children }) => {
       } = await supabase.auth.getSession();
 
       const sessionUser = session?.user ?? null;
-      const guestActive = hasGuestSession();
 
       if (sessionUser) {
         setUser(sessionUser);
-        setIsGuest(false);
-        setIsAuthenticated(true);
-        setAuthError(null);
-      } else if (guestActive) {
-        setUser(null);
-        setIsGuest(true);
+        setIsGuest(getIsAnonymousUser(sessionUser));
         setIsAuthenticated(true);
         setAuthError(null);
       } else {

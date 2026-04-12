@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { ArrowRight, ShieldCheck, TrendingUp, Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 const SpineIcon = () => (
   <svg
@@ -17,42 +18,10 @@ const SpineIcon = () => (
     <rect x="13" y="18" width="14" height="5" rx="2.5" />
     <rect x="13" y="25" width="14" height="5" rx="2.5" />
     <rect x="15" y="32" width="10" height="4" rx="2" opacity="0.9" />
-    <line
-      x1="13"
-      y1="10"
-      x2="27"
-      y2="10"
-      stroke="white"
-      strokeWidth="0.8"
-      opacity="0.35"
-    />
-    <line
-      x1="13"
-      y1="17"
-      x2="27"
-      y2="17"
-      stroke="white"
-      strokeWidth="0.8"
-      opacity="0.35"
-    />
-    <line
-      x1="13"
-      y1="24"
-      x2="27"
-      y2="24"
-      stroke="white"
-      strokeWidth="0.8"
-      opacity="0.35"
-    />
-    <line
-      x1="13"
-      y1="31"
-      x2="27"
-      y2="31"
-      stroke="white"
-      strokeWidth="0.8"
-      opacity="0.35"
-    />
+    <line x1="13" y1="10" x2="27" y2="10" stroke="white" strokeWidth="0.8" opacity="0.35" />
+    <line x1="13" y1="17" x2="27" y2="17" stroke="white" strokeWidth="0.8" opacity="0.35" />
+    <line x1="13" y1="24" x2="27" y2="24" stroke="white" strokeWidth="0.8" opacity="0.35" />
+    <line x1="13" y1="31" x2="27" y2="31" stroke="white" strokeWidth="0.8" opacity="0.35" />
   </svg>
 );
 
@@ -83,7 +52,7 @@ const FEATURES = [
   { icon: ShieldCheck, label: "Personalized routines" },
 ];
 
-async function routeAfterAuth() {
+async function routeAfterAuth(navigate) {
   const {
     data: { user },
     error: userError,
@@ -124,14 +93,14 @@ async function routeAfterAuth() {
 
     if (insertError) throw insertError;
 
-    window.location.href = "/onboarding";
+    navigate("/onboarding", { replace: true });
     return;
   }
 
   if (profile.onboarding_complete) {
-    window.location.href = "/dashboard";
+    navigate("/dashboard", { replace: true });
   } else {
-    window.location.href = "/onboarding";
+    navigate("/onboarding", { replace: true });
   }
 }
 
@@ -141,6 +110,7 @@ export default function Landing() {
   const [loadingGuest, setLoadingGuest] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const { startGuestSession } = useAuth();
+  const navigate = useNavigate();
 
   const handleGoogle = async () => {
     try {
@@ -149,7 +119,7 @@ export default function Landing() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}`,
+          redirectTo: `${window.location.origin}/`,
         },
       });
 
@@ -165,8 +135,8 @@ export default function Landing() {
   const handleGuest = async () => {
     try {
       setLoadingGuest(true);
-      startGuestSession();
-      window.location.href = "/onboarding";
+      await startGuestSession();
+      await routeAfterAuth(navigate);
     } catch (err) {
       console.error("Guest sign in error:", err.message);
       alert(err.message);
@@ -340,7 +310,7 @@ export default function Landing() {
         </Button>
 
         <p className="text-center text-xs text-muted-foreground leading-relaxed pt-1">
-          All progress is saved to your personal account.
+          Guests can try SpineLab before creating a full account.
         </p>
       </motion.div>
     </div>
@@ -352,6 +322,7 @@ function EmailAuthScreen({ mode: initialMode, onBack }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const submit = async () => {
     try {
@@ -388,7 +359,7 @@ function EmailAuthScreen({ mode: initialMode, onBack }) {
         throw new Error("Login succeeded but no user session was found.");
       }
 
-      await routeAfterAuth();
+      await routeAfterAuth(navigate);
     } catch (err) {
       console.error(err.message);
       alert(err.message);
