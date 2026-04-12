@@ -3,8 +3,17 @@ import { supabase } from "@/lib/supabase";
 
 const AuthContext = createContext(null);
 
+function hasGuestSession() {
+  try {
+    return localStorage.getItem("guest") === "true";
+  } catch {
+    return false;
+  }
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [isGuest, setIsGuest] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isLoadingPublicSettings] = useState(false);
@@ -27,33 +36,57 @@ export const AuthProvider = ({ children }) => {
 
         if (error) {
           console.error("[AuthContext] getSession error:", error.message);
+
+          const guestActive = hasGuestSession();
           setUser(null);
-          setIsAuthenticated(false);
-          setAuthError({ type: "auth_required", message: error.message });
+          setIsGuest(guestActive);
+          setIsAuthenticated(guestActive);
+          setAuthError(
+            guestActive
+              ? null
+              : { type: "auth_required", message: error.message }
+          );
           return;
         }
 
         const sessionUser = session?.user ?? null;
+        const guestActive = hasGuestSession();
 
         if (sessionUser) {
           setUser(sessionUser);
+          setIsGuest(false);
+          setIsAuthenticated(true);
+          setAuthError(null);
+        } else if (guestActive) {
+          setUser(null);
+          setIsGuest(true);
           setIsAuthenticated(true);
           setAuthError(null);
         } else {
-          localStorage.removeItem("guest");
           setUser(null);
+          setIsGuest(false);
           setIsAuthenticated(false);
-          setAuthError({ type: "auth_required", message: "Authentication required" });
+          setAuthError({
+            type: "auth_required",
+            message: "Authentication required",
+          });
         }
       } catch (err) {
         console.error("[AuthContext] loadSession error:", err);
         if (!mounted) return;
+
+        const guestActive = hasGuestSession();
         setUser(null);
-        setIsAuthenticated(false);
-        setAuthError({
-          type: "auth_required",
-          message: err?.message || "Authentication required",
-        });
+        setIsGuest(guestActive);
+        setIsAuthenticated(guestActive);
+        setAuthError(
+          guestActive
+            ? null
+            : {
+                type: "auth_required",
+                message: err?.message || "Authentication required",
+              }
+        );
       } finally {
         if (mounted) {
           setIsLoadingAuth(false);
@@ -67,16 +100,26 @@ export const AuthProvider = ({ children }) => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       const sessionUser = session?.user ?? null;
+      const guestActive = hasGuestSession();
 
       if (sessionUser) {
         setUser(sessionUser);
+        setIsGuest(false);
+        setIsAuthenticated(true);
+        setAuthError(null);
+      } else if (guestActive) {
+        setUser(null);
+        setIsGuest(true);
         setIsAuthenticated(true);
         setAuthError(null);
       } else {
-        localStorage.removeItem("guest");
         setUser(null);
+        setIsGuest(false);
         setIsAuthenticated(false);
-        setAuthError({ type: "auth_required", message: "Authentication required" });
+        setAuthError({
+          type: "auth_required",
+          message: "Authentication required",
+        });
       }
 
       setIsLoadingAuth(false);
@@ -87,6 +130,19 @@ export const AuthProvider = ({ children }) => {
       subscription?.unsubscribe?.();
     };
   }, []);
+
+  const startGuestSession = () => {
+    try {
+      localStorage.setItem("guest", "true");
+    } catch {
+      // ignore
+    }
+
+    setUser(null);
+    setIsGuest(true);
+    setIsAuthenticated(true);
+    setAuthError(null);
+  };
 
   const logout = async () => {
     try {
@@ -110,15 +166,26 @@ export const AuthProvider = ({ children }) => {
       } = await supabase.auth.getSession();
 
       const sessionUser = session?.user ?? null;
+      const guestActive = hasGuestSession();
 
       if (sessionUser) {
         setUser(sessionUser);
+        setIsGuest(false);
+        setIsAuthenticated(true);
+        setAuthError(null);
+      } else if (guestActive) {
+        setUser(null);
+        setIsGuest(true);
         setIsAuthenticated(true);
         setAuthError(null);
       } else {
         setUser(null);
+        setIsGuest(false);
         setIsAuthenticated(false);
-        setAuthError({ type: "auth_required", message: "Authentication required" });
+        setAuthError({
+          type: "auth_required",
+          message: "Authentication required",
+        });
       }
     } catch (err) {
       console.error("[AuthContext] checkAppState error:", err);
@@ -129,6 +196,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         user,
+        isGuest,
         isAuthenticated,
         isLoadingAuth,
         isLoadingPublicSettings,
@@ -137,6 +205,7 @@ export const AuthProvider = ({ children }) => {
         logout,
         navigateToLogin,
         checkAppState,
+        startGuestSession,
       }}
     >
       {children}

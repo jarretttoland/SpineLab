@@ -3,34 +3,84 @@ import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { ArrowRight, ShieldCheck, TrendingUp, Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/AuthContext";
 
 const SpineIcon = () => (
-  <svg viewBox="0 0 40 40" className="w-10 h-10" xmlns="http://www.w3.org/2000/svg" fill="white">
+  <svg
+    viewBox="0 0 40 40"
+    className="w-10 h-10"
+    xmlns="http://www.w3.org/2000/svg"
+    fill="white"
+  >
     <rect x="15" y="4" width="10" height="5" rx="2.5" opacity="0.9" />
     <rect x="13" y="11" width="14" height="5" rx="2.5" />
     <rect x="13" y="18" width="14" height="5" rx="2.5" />
     <rect x="13" y="25" width="14" height="5" rx="2.5" />
     <rect x="15" y="32" width="10" height="4" rx="2" opacity="0.9" />
-    <line x1="13" y1="10" x2="27" y2="10" stroke="white" strokeWidth="0.8" opacity="0.35" />
-    <line x1="13" y1="17" x2="27" y2="17" stroke="white" strokeWidth="0.8" opacity="0.35" />
-    <line x1="13" y1="24" x2="27" y2="24" stroke="white" strokeWidth="0.8" opacity="0.35" />
-    <line x1="13" y1="31" x2="27" y2="31" stroke="white" strokeWidth="0.8" opacity="0.35" />
+    <line
+      x1="13"
+      y1="10"
+      x2="27"
+      y2="10"
+      stroke="white"
+      strokeWidth="0.8"
+      opacity="0.35"
+    />
+    <line
+      x1="13"
+      y1="17"
+      x2="27"
+      y2="17"
+      stroke="white"
+      strokeWidth="0.8"
+      opacity="0.35"
+    />
+    <line
+      x1="13"
+      y1="24"
+      x2="27"
+      y2="24"
+      stroke="white"
+      strokeWidth="0.8"
+      opacity="0.35"
+    />
+    <line
+      x1="13"
+      y1="31"
+      x2="27"
+      y2="31"
+      stroke="white"
+      strokeWidth="0.8"
+      opacity="0.35"
+    />
   </svg>
 );
 
 const GoogleIcon = () => (
   <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-    <path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.79h5.4a4.61 4.61 0 0 1-2 3.02v2.5h3.24c1.9-1.75 3-4.33 3-7.31z" fill="#4285F4" />
-    <path d="M10 20c2.7 0 4.97-.9 6.62-2.46l-3.24-2.5a6.03 6.03 0 0 1-8.94-3.17H1.08v2.58A10 10 0 0 0 10 20z" fill="#34A853" />
-    <path d="M4.44 11.87A6.03 6.03 0 0 1 4.44 8.13V5.55H1.08a10 10 0 0 0 0 8.9l3.36-2.58z" fill="#FBBC05" />
-    <path d="M10 3.96a5.44 5.44 0 0 1 3.84 1.5l2.87-2.87A9.65 9.65 0 0 0 10 0 10 10 0 0 0 1.08 5.55l3.36 2.58A5.96 5.96 0 0 1 10 3.96z" fill="#EA4335" />
+    <path
+      d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.79h5.4a4.61 4.61 0 0 1-2 3.02v2.5h3.24c1.9-1.75 3-4.33 3-7.31z"
+      fill="#4285F4"
+    />
+    <path
+      d="M10 20c2.7 0 4.97-.9 6.62-2.46l-3.24-2.5a6.03 6.03 0 0 1-8.94-3.17H1.08v2.58A10 10 0 0 0 10 20z"
+      fill="#34A853"
+    />
+    <path
+      d="M4.44 11.87A6.03 6.03 0 0 1 4.44 8.13V5.55H1.08a10 10 0 0 0 0 8.9l3.36-2.58z"
+      fill="#FBBC05"
+    />
+    <path
+      d="M10 3.96a5.44 5.44 0 0 1 3.84 1.5l2.87-2.87A9.65 9.65 0 0 0 10 0 10 10 0 0 0 1.08 5.55l3.36 2.58A5.96 5.96 0 0 1 10 3.96z"
+      fill="#EA4335"
+    />
   </svg>
 );
 
 const FEATURES = [
   { icon: TrendingUp, label: "Spine Score tracking" },
   { icon: Scan, label: "AI Posture Analysis" },
-  { icon: ShieldCheck, label: "Personalised routines" },
+  { icon: ShieldCheck, label: "Personalized routines" },
 ];
 
 async function routeAfterAuth() {
@@ -62,8 +112,11 @@ async function routeAfterAuth() {
         scan_results: [],
         onboarding_complete: false,
         spine_score: 0,
+        posture_score: 0,
         structural_score: 0,
         consistency_score: 50,
+        mobility_score: 50,
+        strength_score: 50,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "id" }
@@ -76,17 +129,18 @@ async function routeAfterAuth() {
   }
 
   if (profile.onboarding_complete) {
-    window.location.href = "/";
+    window.location.href = "/dashboard";
   } else {
     window.location.href = "/onboarding";
   }
 }
 
 export default function Landing() {
-  const [screen, setScreen] = useState(null); // null | signup | login | email
+  const [screen, setScreen] = useState(null);
   const [emailMode, setEmailMode] = useState("login");
   const [loadingGuest, setLoadingGuest] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const { startGuestSession } = useAuth();
 
   const handleGoogle = async () => {
     try {
@@ -95,7 +149,7 @@ export default function Landing() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/`,
+          redirectTo: `${window.location.origin}`,
         },
       });
 
@@ -111,12 +165,8 @@ export default function Landing() {
   const handleGuest = async () => {
     try {
       setLoadingGuest(true);
-
-      const { error } = await supabase.auth.signInAnonymously();
-      if (error) throw error;
-
-      localStorage.setItem("guest", "true");
-      await routeAfterAuth();
+      startGuestSession();
+      window.location.href = "/onboarding";
     } catch (err) {
       console.error("Guest sign in error:", err.message);
       alert(err.message);
@@ -159,7 +209,9 @@ export default function Landing() {
             </h1>
 
             <p className="text-sm text-muted-foreground">
-              {isSignup ? "Start your SpineLab journey." : "Log in to continue your progress."}
+              {isSignup
+                ? "Start your SpineLab journey."
+                : "Log in to continue your progress."}
             </p>
           </motion.div>
         </div>
@@ -325,7 +377,9 @@ function EmailAuthScreen({ mode: initialMode, onBack }) {
       const session = result.data?.session ?? null;
 
       if (mode === "signup" && !session) {
-        alert("Account created. If email confirmation is enabled, please verify your email before logging in.");
+        alert(
+          "Account created. If email confirmation is enabled, please verify your email before logging in."
+        );
         onBack();
         return;
       }
@@ -367,7 +421,11 @@ function EmailAuthScreen({ mode: initialMode, onBack }) {
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        <Button onClick={submit} disabled={loading || !email || !password} className="w-full h-12 rounded-xl">
+        <Button
+          onClick={submit}
+          disabled={loading || !email || !password}
+          className="w-full h-12 rounded-xl"
+        >
           {loading ? "Loading..." : mode === "signup" ? "Create Account" : "Log In"}
         </Button>
 
