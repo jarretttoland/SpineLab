@@ -36,6 +36,7 @@ function FailureScreen({
   onRetakeCamera,
   onRetakeLibrary,
   onNewScan,
+  showContinueButton,
   onContinue,
   continueLabel,
 }) {
@@ -67,6 +68,15 @@ function FailureScreen({
       </div>
 
       <div className="space-y-3">
+        {showContinueButton && onContinue ? (
+          <Button
+            onClick={onContinue}
+            className="w-full h-14 rounded-2xl text-base font-semibold"
+          >
+            {continueLabel || "See Total Spine Score"}
+          </Button>
+        ) : null}
+
         <Button
           onClick={onRetakeCamera}
           className="w-full h-14 rounded-2xl text-base font-semibold"
@@ -81,15 +91,6 @@ function FailureScreen({
         >
           Choose Different Photo
         </Button>
-
-        {onContinue ? (
-          <Button
-            onClick={onContinue}
-            className="w-full h-14 rounded-2xl text-base font-semibold"
-          >
-            {continueLabel || "See My Total Spine Score"}
-          </Button>
-        ) : null}
 
         <Button
           variant="ghost"
@@ -148,9 +149,12 @@ export default function ScanResults({
   onNewScan,
   onRetakeCamera,
   onRetakeLibrary,
-  onContinue,
-  continueLabel = "See My Total Spine Score",
   detectionFailed = false,
+
+  // Only used for onboarding scan flow
+  showContinueButton = false,
+  onContinue = null,
+  continueLabel = "See Total Spine Score",
 }) {
   const [showLandmarks, setShowLandmarks] = useState(true);
 
@@ -160,6 +164,7 @@ export default function ScanResults({
         onRetakeCamera={onRetakeCamera}
         onRetakeLibrary={onRetakeLibrary}
         onNewScan={onNewScan}
+        showContinueButton={showContinueButton}
         onContinue={onContinue}
         continueLabel={continueLabel}
       />
@@ -325,12 +330,12 @@ export default function ScanResults({
       </div>
 
       <div className="space-y-3">
-        {onContinue ? (
+        {showContinueButton && onContinue ? (
           <Button
             onClick={onContinue}
             className="w-full h-14 rounded-2xl text-base font-semibold"
           >
-            {continueLabel || "See My Total Spine Score"}
+            {continueLabel || "See Total Spine Score"}
           </Button>
         ) : null}
 
