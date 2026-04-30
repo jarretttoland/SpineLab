@@ -32,18 +32,17 @@ const LoadingScreen = () => (
 const ProtectedAppRoutes = () => {
   const { isLoadingAuth, isAuthenticated } = useAuth();
 
-  if (isLoadingAuth) {
-    return <LoadingScreen />;
-  }
+  if (isLoadingAuth) return <LoadingScreen />;
 
-  if (!isAuthenticated) {
-    return <Landing />;
-  }
+  if (!isAuthenticated) return <Landing />;
 
   return (
     <Routes>
+      {/* No bottom nav */}
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/onboarding-scan" element={<PostureScan />} />
 
+      {/* Bottom nav only after onboarding/dashboard app */}
       <Route element={<Layout />}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />

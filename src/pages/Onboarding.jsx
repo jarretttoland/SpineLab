@@ -564,7 +564,7 @@ function ResultsStep({ results, saving, onBack, onConfirm, isEditMode, usedScan 
           disabled={saving}
           className="flex-1 h-14 rounded-2xl text-base font-semibold"
         >
-          {saving ? "Saving..." : isEditMode ? "Save Updated Plan" : "Go to Dashboard"}
+          {saving ? "Saving..." : isEditMode ? "Save Updated Plan" : "See My Plan"}
         </Button>
       </div>
     </div>
@@ -716,8 +716,14 @@ export default function Onboarding() {
         setProfile(profileData ?? null);
 
         if (fromScan && profileData) {
-          setResults(generateResultsFromProfile(profileData));
-          setUsedScan(typeof profileData.posture_score === "number");
+          const generatedResults = generateResultsFromProfile(profileData);
+
+          setResults(generatedResults);
+
+          // Critical fix: force post-scan onboarding mode so the app shows
+          // the final total Spine Score / plan page instead of restarting onboarding.
+          setUsedScan(true);
+
           setPhase("results");
           setLoadingProfile(false);
           return;
@@ -1022,7 +1028,8 @@ export default function Onboarding() {
       const estimatedResults = generateResults();
       setResults(estimatedResults);
       await saveProfile({ complete: false, resultOverride: estimatedResults });
-      navigate("/scan?from=onboarding");
+
+      navigate("/onboarding-scan?from=onboarding", { replace: true });
     } catch (err) {
       console.error("[Onboarding] save before scan error:", err);
       alert("We couldn't save your plan before the scan. Please try again.");
@@ -1204,7 +1211,7 @@ export default function Onboarding() {
         usedScan={usedScan}
         onBack={() => {
           if (fromScan) {
-            navigate("/scan?from=onboarding", { replace: true });
+            navigate("/onboarding-scan?from=onboarding", { replace: true });
           } else {
             setPhase("scan_option");
           }
