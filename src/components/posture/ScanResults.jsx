@@ -32,13 +32,23 @@ function LandmarkOverlay({ landmarks }) {
   );
 }
 
-function FailureScreen({ onRetakeCamera, onRetakeLibrary, onNewScan }) {
+function FailureScreen({
+  onRetakeCamera,
+  onRetakeLibrary,
+  onNewScan,
+  onContinue,
+  continueLabel,
+}) {
   return (
     <div className="px-6 pt-12 pb-8 max-w-lg mx-auto">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary mb-2">
         Scan Result
       </p>
-      <h1 className="text-2xl font-bold tracking-tight mb-1">Scan couldn't be read</h1>
+
+      <h1 className="text-2xl font-bold tracking-tight mb-1">
+        Scan couldn't be read
+      </h1>
+
       <p className="text-sm text-muted-foreground mb-8">
         We couldn't get a reliable posture scan. Please retake with your side profile visible.
       </p>
@@ -47,7 +57,9 @@ function FailureScreen({ onRetakeCamera, onRetakeLibrary, onNewScan }) {
         <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <AlertTriangle className="w-6 h-6 text-amber-600" />
         </div>
+
         <h2 className="font-bold text-base mb-2">Unclear posture reading</h2>
+
         <p className="text-sm text-muted-foreground leading-relaxed">
           Landmark detection was inconclusive. This usually means the body was not fully sideways,
           was too close, or the lighting was poor.
@@ -55,13 +67,36 @@ function FailureScreen({ onRetakeCamera, onRetakeLibrary, onNewScan }) {
       </div>
 
       <div className="space-y-3">
-        <Button onClick={onRetakeCamera} className="w-full h-14 rounded-2xl text-base font-semibold">
+        <Button
+          onClick={onRetakeCamera}
+          className="w-full h-14 rounded-2xl text-base font-semibold"
+        >
           Retake with Camera
         </Button>
-        <Button variant="outline" onClick={onRetakeLibrary} className="w-full h-12 rounded-2xl">
+
+        <Button
+          variant="outline"
+          onClick={onRetakeLibrary}
+          className="w-full h-12 rounded-2xl"
+        >
           Choose Different Photo
         </Button>
-        <Button variant="ghost" onClick={onNewScan} className="w-full text-muted-foreground text-sm">
+
+        {onContinue ? (
+          <Button
+            variant="secondary"
+            onClick={onContinue}
+            className="w-full h-12 rounded-2xl"
+          >
+            {continueLabel}
+          </Button>
+        ) : null}
+
+        <Button
+          variant="ghost"
+          onClick={onNewScan}
+          className="w-full text-muted-foreground text-sm"
+        >
           Back to start
         </Button>
       </div>
@@ -77,6 +112,7 @@ function TrendRow({ trend }) {
   const worse = lower.includes("increase");
 
   const Icon = improved ? ArrowDown : worse ? ArrowUp : Minus;
+
   const cls = improved
     ? "text-emerald-700 bg-emerald-50 border-emerald-100"
     : worse
@@ -84,7 +120,9 @@ function TrendRow({ trend }) {
     : "text-muted-foreground bg-secondary border-border";
 
   return (
-    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold ${cls}`}>
+    <div
+      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold ${cls}`}
+    >
       <Icon className="w-3.5 h-3.5" />
       {trend}
     </div>
@@ -111,6 +149,8 @@ export default function ScanResults({
   onNewScan,
   onRetakeCamera,
   onRetakeLibrary,
+  onContinue,
+  continueLabel = "Continue",
   detectionFailed = false,
 }) {
   const [showLandmarks, setShowLandmarks] = useState(true);
@@ -121,6 +161,8 @@ export default function ScanResults({
         onRetakeCamera={onRetakeCamera}
         onRetakeLibrary={onRetakeLibrary}
         onNewScan={onNewScan}
+        onContinue={onContinue}
+        continueLabel={continueLabel}
       />
     );
   }
@@ -140,7 +182,9 @@ export default function ScanResults({
 
           <div className="bg-primary/10 rounded-2xl px-3 py-1.5 text-right">
             <p className="text-xl font-bold text-primary">{overallScore}</p>
-            <p className="text-[10px] text-primary/70 font-medium">Posture Score</p>
+            <p className="text-[10px] text-primary/70 font-medium">
+              Posture Score
+            </p>
           </div>
         </div>
 
@@ -162,14 +206,20 @@ export default function ScanResults({
         style={{ aspectRatio: "3/4" }}
       >
         {imageUrl ? (
-          <img src={imageUrl} alt="Posture scan" className="w-full h-full object-cover" />
+          <img
+            src={imageUrl}
+            alt="Posture scan"
+            className="w-full h-full object-cover"
+          />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
             No scan image available
           </div>
         )}
 
-        {showLandmarks && imageUrl ? <LandmarkOverlay landmarks={landmarks} /> : null}
+        {showLandmarks && imageUrl ? (
+          <LandmarkOverlay landmarks={landmarks} />
+        ) : null}
       </div>
 
       <div className="flex justify-end mb-4">
@@ -177,7 +227,11 @@ export default function ScanResults({
           onClick={() => setShowLandmarks((v) => !v)}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          {showLandmarks ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          {showLandmarks ? (
+            <EyeOff className="w-3.5 h-3.5" />
+          ) : (
+            <Eye className="w-3.5 h-3.5" />
+          )}
           {showLandmarks ? "Hide landmarks" : "Show landmarks"}
         </button>
       </div>
@@ -187,6 +241,7 @@ export default function ScanResults({
           <TrendingUp className="w-4 h-4 text-primary" />
           <p className="text-sm font-semibold">Spine Score Impact</p>
         </div>
+
         <p className="text-sm text-foreground/85">
           Spine Score: {previousSpineScore} →{" "}
           <span className="font-semibold text-primary">{newSpineScore}</span>{" "}
@@ -203,19 +258,27 @@ export default function ScanResults({
 
       <div className="mb-5 grid grid-cols-3 gap-2">
         <div className="bg-secondary rounded-2xl p-3 text-center">
-          <p className="text-lg font-bold text-foreground">{Math.round(subscores.headNeck ?? 0)}</p>
+          <p className="text-lg font-bold text-foreground">
+            {Math.round(subscores.headNeck ?? 0)}
+          </p>
           <p className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5">
             Head / Neck
           </p>
         </div>
+
         <div className="bg-secondary rounded-2xl p-3 text-center">
-          <p className="text-lg font-bold text-foreground">{Math.round(subscores.shoulderThoracic ?? 0)}</p>
+          <p className="text-lg font-bold text-foreground">
+            {Math.round(subscores.shoulderThoracic ?? 0)}
+          </p>
           <p className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5">
             Shoulder / Upper
           </p>
         </div>
+
         <div className="bg-secondary rounded-2xl p-3 text-center">
-          <p className="text-lg font-bold text-foreground">{Math.round(subscores.lumbarPelvis ?? 0)}</p>
+          <p className="text-lg font-bold text-foreground">
+            {Math.round(subscores.lumbarPelvis ?? 0)}
+          </p>
           <p className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5">
             Lumbar / Pelvis
           </p>
@@ -230,7 +293,9 @@ export default function ScanResults({
         {findings.length === 0 ? (
           <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <p className="text-sm text-emerald-800">No significant postural tendencies detected.</p>
+            <p className="text-sm text-emerald-800">
+              No significant postural tendencies detected.
+            </p>
           </div>
         ) : (
           <div className="space-y-2.5">
@@ -239,12 +304,16 @@ export default function ScanResults({
                 key={f.id || `${f.label}-${i}`}
                 className="bg-secondary border border-border rounded-2xl px-4 py-3"
               >
-                <p className="font-medium text-sm text-foreground leading-snug">{f.label || "Finding"}</p>
+                <p className="font-medium text-sm text-foreground leading-snug">
+                  {f.label || "Finding"}
+                </p>
+
                 {f.detail ? (
                   <p className="text-xs text-muted-foreground leading-relaxed mt-1">
                     {f.detail}
                   </p>
                 ) : null}
+
                 {f.confidence ? (
                   <p className="text-[11px] text-muted-foreground mt-2">
                     Confidence: {f.confidence}
@@ -257,7 +326,20 @@ export default function ScanResults({
       </div>
 
       <div className="space-y-3">
-        <Button variant="ghost" onClick={onNewScan} className="w-full h-12 rounded-2xl text-muted-foreground gap-2">
+        {onContinue ? (
+          <Button
+            onClick={onContinue}
+            className="w-full h-14 rounded-2xl text-base font-semibold"
+          >
+            {continueLabel}
+          </Button>
+        ) : null}
+
+        <Button
+          variant="ghost"
+          onClick={onNewScan}
+          className="w-full h-12 rounded-2xl text-muted-foreground gap-2"
+        >
           <RotateCcw className="w-4 h-4" /> New Scan
         </Button>
       </div>
