@@ -84,11 +84,10 @@ function FailureScreen({
 
         {onContinue ? (
           <Button
-            variant="secondary"
             onClick={onContinue}
-            className="w-full h-12 rounded-2xl"
+            className="w-full h-14 rounded-2xl text-base font-semibold"
           >
-            {continueLabel}
+            {continueLabel || "See My Total Spine Score"}
           </Button>
         ) : null}
 
@@ -150,7 +149,7 @@ export default function ScanResults({
   onRetakeCamera,
   onRetakeLibrary,
   onContinue,
-  continueLabel = "Continue",
+  continueLabel = "See My Total Spine Score",
   detectionFailed = false,
 }) {
   const [showLandmarks, setShowLandmarks] = useState(true);
@@ -331,7 +330,7 @@ export default function ScanResults({
             onClick={onContinue}
             className="w-full h-14 rounded-2xl text-base font-semibold"
           >
-            {continueLabel}
+            {continueLabel || "See My Total Spine Score"}
           </Button>
         ) : null}
 
@@ -340,7 +339,7 @@ export default function ScanResults({
           onClick={onNewScan}
           className="w-full h-12 rounded-2xl text-muted-foreground gap-2"
         >
-          <RotateCcw className="w-4 h-4" /> New Scan
+          <RotateCcw className="w-4 h-4" /> Retake Scan
         </Button>
       </div>
     </div>
