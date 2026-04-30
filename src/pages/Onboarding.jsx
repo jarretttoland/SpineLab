@@ -11,7 +11,7 @@ import {
   getInitialConsistencyScore,
 } from "@/lib/spineScore";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight, Shield, FileText } from "lucide-react";
+import { ArrowLeft, ArrowRight, Shield, FileText, Camera } from "lucide-react";
 
 const PAIN_AREA_OPTIONS = [
   { value: "neck", label: "Neck" },
@@ -80,12 +80,9 @@ const FOLLOW_UP_QUESTIONS = [
 function determinePlanType(primaryPain, painAreas = []) {
   if (!primaryPain && painAreas?.length > 1) return "balanced";
   if (painAreas?.length > 1) return "balanced";
-
   if (primaryPain === "neck") return "neck";
   if (primaryPain === "mid_back") return "mid_back";
   if (primaryPain === "low_back") return "low_back";
-  if (primaryPain === "radiating") return "balanced";
-
   return "balanced";
 }
 
@@ -107,14 +104,8 @@ function determineRoutineLevel({
     !hadSurgery &&
     movementResponse !== "worse";
 
-  if (hadSurgery || painWorse || sedentary || older) {
-    return "easy";
-  }
-
-  if (performanceMode) {
-    return "hard";
-  }
-
+  if (hadSurgery || painWorse || sedentary || older) return "easy";
+  if (performanceMode) return "hard";
   return "moderate";
 }
 
@@ -188,17 +179,15 @@ function SingleQuestionStep({
                 >
                   <div
                     className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-                      isSelected ? "border-primary bg-primary" : "border-muted-foreground/40"
+                      isSelected
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground/40"
                     }`}
                   >
                     {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                   </div>
 
-                  <span
-                    className={`text-sm font-medium ${
-                      isSelected ? "text-foreground" : "text-foreground/80"
-                    }`}
-                  >
+                  <span className="text-sm font-medium text-foreground/80">
                     {opt.label}
                   </span>
                 </motion.button>
@@ -287,17 +276,15 @@ function MultiSelectStep({
                 >
                   <div
                     className={`w-5 h-5 rounded-xl border-2 flex items-center justify-center shrink-0 transition-colors ${
-                      isSelected ? "border-primary bg-primary" : "border-muted-foreground/40"
+                      isSelected
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground/40"
                     }`}
                   >
                     {isSelected && <div className="w-2.5 h-2.5 rounded-sm bg-white" />}
                   </div>
 
-                  <span
-                    className={`text-sm font-medium ${
-                      isSelected ? "text-foreground" : "text-foreground/80"
-                    }`}
-                  >
+                  <span className="text-sm font-medium text-foreground/80">
                     {opt.label}
                   </span>
                 </motion.button>
@@ -403,11 +390,77 @@ function IntroStep({ onStart, onPrivacy, onTerms }) {
   );
 }
 
-function ResultsStep({ results, saving, onBack, onConfirm, isEditMode }) {
+function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
+  return (
+    <div className="min-h-screen px-6 pt-12 pb-10 flex flex-col">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-lg mx-auto w-full flex-1 flex flex-col justify-center"
+      >
+        <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-5">
+          <Camera className="w-6 h-6 text-primary" />
+        </div>
+
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary mb-3">
+          Optional posture scan
+        </p>
+
+        <h1 className="text-3xl font-bold tracking-tight leading-tight mb-3">
+          Want your real posture score?
+        </h1>
+
+        <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+          Your answers are enough to build your plan, but a quick posture scan gives
+          SpineLab a real posture score before showing your final Spine Score.
+        </p>
+
+        <div className="rounded-3xl border border-border bg-card p-5 mb-8">
+          <p className="text-sm font-semibold mb-3">Recommended</p>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>• Takes less than a minute</p>
+            <p>• Gives you an actual posture score</p>
+            <p>• Makes your starting Spine Score more accurate</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Button
+            onClick={onScanNow}
+            disabled={saving}
+            className="w-full h-14 rounded-2xl text-base font-semibold"
+          >
+            {saving ? "Saving..." : "Start posture scan"}
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={onSkip}
+            disabled={saving}
+            className="w-full h-14 rounded-2xl text-base font-semibold"
+          >
+            Skip for now
+          </Button>
+
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={saving}
+            className="w-full text-sm text-muted-foreground mt-2"
+          >
+            Back to questions
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function ResultsStep({ results, saving, onBack, onConfirm, isEditMode, usedScan }) {
   const breakdownItems = [
     { label: "Mobility", value: results.breakdown.mobility },
     { label: "Strength", value: results.breakdown.strength },
-    { label: "Posture", value: results.breakdown.posture, estimated: true },
+    { label: "Posture", value: results.breakdown.posture, estimated: !usedScan },
   ];
 
   return (
@@ -426,7 +479,9 @@ function ResultsStep({ results, saving, onBack, onConfirm, isEditMode }) {
         </h1>
 
         <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-          This score is based on your answers and will evolve as you scan your posture and complete your plan.
+          {usedScan
+            ? "This score uses your answers plus your posture scan."
+            : "This score is based on your answers. You can scan your posture later from the Scan tab."}
         </p>
 
         <div className="rounded-3xl border border-border bg-card p-6 mb-5">
@@ -436,7 +491,8 @@ function ResultsStep({ results, saving, onBack, onConfirm, isEditMode }) {
             <span className="text-muted-foreground mb-1">/100</span>
           </div>
           <p className="text-sm text-muted-foreground mt-3">
-            Structural baseline: {results.structuralScore} · Consistency start: {results.consistencyScore}
+            Structural baseline: {results.structuralScore} · Consistency start:{" "}
+            {results.consistencyScore}
           </p>
         </div>
 
@@ -456,13 +512,15 @@ function ResultsStep({ results, saving, onBack, onConfirm, isEditMode }) {
                   </div>
                   <span className="text-sm font-semibold">{item.value}</span>
                 </div>
+
                 <div className="h-2 rounded-full bg-secondary overflow-hidden">
                   <div
                     className="h-full rounded-full bg-primary transition-all"
                     style={{ width: `${item.value}%` }}
                   />
                 </div>
-                {item.label === "Posture" && (
+
+                {item.label === "Posture" && item.estimated && (
                   <p className="text-[11px] text-muted-foreground mt-2">
                     Estimated. A posture scan will provide your actual posture score.
                   </p>
@@ -506,7 +564,7 @@ function ResultsStep({ results, saving, onBack, onConfirm, isEditMode }) {
           disabled={saving}
           className="flex-1 h-14 rounded-2xl text-base font-semibold"
         >
-          {saving ? "Saving..." : isEditMode ? "Save Updated Plan" : "See My Plan"}
+          {saving ? "Saving..." : isEditMode ? "Save Updated Plan" : "Go to Dashboard"}
         </Button>
       </div>
     </div>
@@ -520,6 +578,7 @@ export default function Onboarding() {
   const params = new URLSearchParams(location.search);
   const isEditMode =
     location.state?.isEditMode === true || params.get("edit") === "true";
+  const fromScan = params.get("fromScan") === "true";
 
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [user, setUser] = useState(null);
@@ -542,7 +601,88 @@ export default function Onboarding() {
   });
 
   const [results, setResults] = useState(null);
+  const [usedScan, setUsedScan] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const buildAnswersFromProfile = (profileData) => {
+    const resolvedPainAreas = Array.isArray(profileData?.pain_areas)
+      ? profileData.pain_areas
+      : [];
+
+    const resolvedPrimaryPain =
+      profileData?.primary_pain || resolvedPainAreas[0] || null;
+
+    const resolvedPrimaryGoal =
+      profileData?.primary_goal || profileData?.goal || null;
+
+    return {
+      primaryPain: resolvedPrimaryPain,
+      secondaryPain: Array.isArray(profileData?.secondary_pain)
+        ? profileData.secondary_pain
+        : resolvedPainAreas.filter((a) => a !== resolvedPrimaryPain),
+      painAreas: resolvedPainAreas,
+      primaryGoal: resolvedPrimaryGoal,
+      secondaryGoals: Array.isArray(profileData?.secondary_goals)
+        ? profileData.secondary_goals
+        : [],
+      problemArea: resolvedPrimaryPain,
+      goal: resolvedPrimaryGoal,
+      movementResponse: profileData?.movement_response || null,
+      sittingHours:
+        profileData?.sitting_hours >= 6
+          ? "6plus"
+          : profileData?.sitting_hours >= 3
+          ? "3to6"
+          : "under3",
+      activityLevel: profileData?.activity_level || null,
+      spineSurgery: profileData?.spine_surgery ? "yes" : "no",
+      ageRange: profileData?.age_range || null,
+    };
+  };
+
+  const generateResultsFromProfile = (profileData) => {
+    const answers = buildAnswersFromProfile(profileData);
+    const postureFindings = [];
+    const fallbackBreakdown = calculateBreakdown(answers, postureFindings);
+
+    const structuralScore =
+      typeof profileData?.structural_score === "number"
+        ? profileData.structural_score
+        : calculateStructuralBaseline(answers, postureFindings);
+
+    const consistencyScore =
+      typeof profileData?.consistency_score === "number"
+        ? profileData.consistency_score
+        : getInitialConsistencyScore();
+
+    const score =
+      typeof profileData?.spine_score === "number"
+        ? profileData.spine_score
+        : calculateFinalSpineScore(structuralScore, consistencyScore);
+
+    const postureScore =
+      typeof profileData?.posture_score === "number"
+        ? profileData.posture_score
+        : fallbackBreakdown.posture;
+
+    const archetypeKey = profileData?.archetype || classifyArchetype(answers);
+    const planFocus = generatePlanFocus(archetypeKey, answers, postureFindings);
+
+    return {
+      structuralScore,
+      consistencyScore,
+      score,
+      breakdown: {
+        ...fallbackBreakdown,
+        posture: postureScore,
+      },
+      archetypeKey,
+      archetypeLabel: archetypeKey
+        ? archetypeKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+        : "Your plan",
+      planFocus,
+    };
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -574,6 +714,14 @@ export default function Onboarding() {
         if (!mounted) return;
 
         setProfile(profileData ?? null);
+
+        if (fromScan && profileData) {
+          setResults(generateResultsFromProfile(profileData));
+          setUsedScan(typeof profileData.posture_score === "number");
+          setPhase("results");
+          setLoadingProfile(false);
+          return;
+        }
 
         if (isEditMode && profileData) {
           const existingPainAreas = Array.isArray(profileData.pain_areas)
@@ -623,11 +771,6 @@ export default function Onboarding() {
           return;
         }
 
-        if (profileData?.onboarding_complete) {
-          navigate("/dashboard", { replace: true });
-          return;
-        }
-
         setLoadingProfile(false);
       } catch (err) {
         console.error("[Onboarding] load error:", err);
@@ -641,13 +784,18 @@ export default function Onboarding() {
     return () => {
       mounted = false;
     };
-  }, [navigate, isEditMode]);
+  }, [navigate, isEditMode, fromScan]);
 
   const hasPainTiebreak = painAreas.length > 1;
   const hasGoalTiebreak = goals.length > 1;
 
   const totalSteps = useMemo(() => {
-    return 2 + (hasPainTiebreak ? 1 : 0) + (hasGoalTiebreak ? 1 : 0) + FOLLOW_UP_QUESTIONS.length;
+    return (
+      2 +
+      (hasPainTiebreak ? 1 : 0) +
+      (hasGoalTiebreak ? 1 : 0) +
+      FOLLOW_UP_QUESTIONS.length
+    );
   }, [hasPainTiebreak, hasGoalTiebreak]);
 
   const getStepIndex = () => {
@@ -694,10 +842,6 @@ export default function Onboarding() {
     setPhase("goal_multi");
   };
 
-  const handlePainTiebreakToggle = (value) => {
-    setPrimaryPain(value);
-  };
-
   const handlePainTiebreakNext = () => {
     if (!primaryPain) return;
     setPhase("goal_multi");
@@ -717,10 +861,6 @@ export default function Onboarding() {
     setPrimaryGoal(goals[0]);
     setPhase("follow_up");
     setFollowUpIndex(0);
-  };
-
-  const handleGoalTiebreakToggle = (value) => {
-    setPrimaryGoal(value);
   };
 
   const handleGoalTiebreakNext = () => {
@@ -776,6 +916,81 @@ export default function Onboarding() {
     };
   };
 
+  const buildProfilePayload = ({ complete = false, resultOverride = null } = {}) => {
+    const answers = buildAnswers();
+    const currentResults = resultOverride || results || generateResults();
+
+    const planType = determinePlanType(answers.primaryPain, painAreas);
+
+    const routineLevel = determineRoutineLevel({
+      movementResponse: followUpAnswers.movementResponse,
+      activityLevel: followUpAnswers.activityLevel,
+      spineSurgery: followUpAnswers.spineSurgery,
+      ageRange: followUpAnswers.ageRange,
+      primaryGoal: answers.primaryGoal,
+    });
+
+    return {
+      id: user.id,
+      pain_areas: painAreas,
+      plan_type: planType,
+      routine_level: routineLevel,
+
+      sitting_hours:
+        followUpAnswers.sittingHours === "6plus"
+          ? 8
+          : followUpAnswers.sittingHours === "3to6"
+          ? 5
+          : 2,
+
+      works_out: followUpAnswers.activityLevel === "very_active",
+
+      structural_score: currentResults.structuralScore,
+      consistency_score: currentResults.consistencyScore,
+      spine_score: currentResults.score,
+
+      onboarding_complete: complete,
+
+      current_streak: profile?.current_streak ?? 0,
+      longest_streak: profile?.longest_streak ?? 0,
+
+      scan_results: profile?.scan_results ?? [],
+      scan_image_url: profile?.scan_image_url ?? "",
+
+      movement_response: followUpAnswers.movementResponse,
+      activity_level: followUpAnswers.activityLevel,
+      age_range: followUpAnswers.ageRange,
+      spine_surgery: followUpAnswers.spineSurgery === "yes",
+
+      goal: answers.primaryGoal,
+      archetype: currentResults.archetypeKey,
+
+      primary_pain: answers.primaryPain,
+      secondary_pain: answers.secondaryPain,
+      primary_goal: answers.primaryGoal,
+      secondary_goals: answers.secondaryGoals,
+
+      updated_at: new Date().toISOString(),
+    };
+  };
+
+  const saveProfile = async ({ complete = false, resultOverride = null } = {}) => {
+    if (!user?.id) return null;
+
+    const payload = buildProfilePayload({ complete, resultOverride });
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .upsert(payload, { onConflict: "id" })
+      .select("*")
+      .single();
+
+    if (error) throw error;
+
+    setProfile(data);
+    return data;
+  };
+
   const handleFollowUpNext = () => {
     const currentAnswer = followUpAnswers[currentFollowUp.key];
     if (!currentAnswer) return;
@@ -785,21 +1000,54 @@ export default function Onboarding() {
       return;
     }
 
-    setResults(generateResults());
-    setPhase("results");
+    setPhase("scan_option");
   };
 
   const handleFollowUpBack = () => {
     if (followUpIndex === 0) {
-      if (hasGoalTiebreak) {
-        setPhase("goal_tiebreak");
-      } else {
-        setPhase("goal_multi");
-      }
+      if (hasGoalTiebreak) setPhase("goal_tiebreak");
+      else setPhase("goal_multi");
       return;
     }
 
     setFollowUpIndex((i) => i - 1);
+  };
+
+  const handleStartScan = async () => {
+    if (!user?.id || saving) return;
+
+    setSaving(true);
+
+    try {
+      const estimatedResults = generateResults();
+      setResults(estimatedResults);
+      await saveProfile({ complete: false, resultOverride: estimatedResults });
+      navigate("/scan?from=onboarding");
+    } catch (err) {
+      console.error("[Onboarding] save before scan error:", err);
+      alert("We couldn't save your plan before the scan. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSkipScan = async () => {
+    if (!user?.id || saving) return;
+
+    setSaving(true);
+
+    try {
+      const estimatedResults = generateResults();
+      setResults(estimatedResults);
+      setUsedScan(false);
+      await saveProfile({ complete: false, resultOverride: estimatedResults });
+      setPhase("results");
+    } catch (err) {
+      console.error("[Onboarding] skip scan save error:", err);
+      alert("We couldn't save your plan yet. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSaveAndGoHome = async () => {
@@ -808,75 +1056,19 @@ export default function Onboarding() {
     setSaving(true);
 
     try {
-      const answers = buildAnswers();
-
-      const structuralScore = results.structuralScore;
-      const consistencyScore = results.consistencyScore;
-      const finalScore = results.score;
-
-      const planType = determinePlanType(answers.primaryPain, painAreas);
-
-      const routineLevel = determineRoutineLevel({
-        movementResponse: followUpAnswers.movementResponse,
-        activityLevel: followUpAnswers.activityLevel,
-        spineSurgery: followUpAnswers.spineSurgery,
-        ageRange: followUpAnswers.ageRange,
-        primaryGoal: answers.primaryGoal,
-      });
-
-      const payload = {
-        id: user.id,
-        pain_areas: painAreas,
-
-        plan_type: planType,
-        routine_level: routineLevel,
-
-        sitting_hours:
-          followUpAnswers.sittingHours === "6plus"
-            ? 8
-            : followUpAnswers.sittingHours === "3to6"
-            ? 5
-            : 2,
-
-        works_out: followUpAnswers.activityLevel === "very_active",
-
-        structural_score: structuralScore,
-        consistency_score: consistencyScore,
-        spine_score: finalScore,
-
-        onboarding_complete: true,
-
-        current_streak: profile?.current_streak ?? 0,
-        longest_streak: profile?.longest_streak ?? 0,
-
-        scan_results: profile?.scan_results ?? [],
-        scan_image_url: profile?.scan_image_url ?? "",
-
-        movement_response: followUpAnswers.movementResponse,
-        activity_level: followUpAnswers.activityLevel,
-        age_range: followUpAnswers.ageRange,
-        spine_surgery: followUpAnswers.spineSurgery === "yes",
-
-        goal: answers.primaryGoal,
-        archetype: results.archetypeKey,
-
-        primary_pain: answers.primaryPain,
-        secondary_pain: answers.secondaryPain,
-        primary_goal: answers.primaryGoal,
-        secondary_goals: answers.secondaryGoals,
-
-        updated_at: new Date().toISOString(),
-      };
-
       const { error } = await supabase
         .from("profiles")
-        .upsert(payload, { onConflict: "id" });
+        .update({
+          onboarding_complete: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
 
       if (error) throw error;
 
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      console.error("[Onboarding] save error:", err);
+      console.error("[Onboarding] final save error:", err);
       alert("We couldn't save your plan yet. Please try again.");
     } finally {
       setSaving(false);
@@ -927,7 +1119,7 @@ export default function Onboarding() {
         question="Which area bothers you the most?"
         subtitle="Select the one that's your biggest concern right now."
         selected={primaryPain ? [primaryPain] : []}
-        onToggle={handlePainTiebreakToggle}
+        onToggle={setPrimaryPain}
         onNext={handlePainTiebreakNext}
         onBack={() => setPhase("pain_multi")}
         options={PAIN_AREA_OPTIONS.filter((o) => painAreas.includes(o.value))}
@@ -966,7 +1158,7 @@ export default function Onboarding() {
         question="What is your top priority right now?"
         subtitle="This drives the main focus of your plan."
         selected={primaryGoal ? [primaryGoal] : []}
-        onToggle={handleGoalTiebreakToggle}
+        onToggle={setPrimaryGoal}
         onNext={handleGoalTiebreakNext}
         onBack={() => setPhase("goal_multi")}
         options={GOAL_OPTIONS.filter((o) => goals.includes(o.value))}
@@ -990,14 +1182,32 @@ export default function Onboarding() {
     );
   }
 
+  if (phase === "scan_option") {
+    return (
+      <ScanOptionStep
+        saving={saving}
+        onScanNow={handleStartScan}
+        onSkip={handleSkipScan}
+        onBack={() => {
+          setPhase("follow_up");
+          setFollowUpIndex(FOLLOW_UP_QUESTIONS.length - 1);
+        }}
+      />
+    );
+  }
+
   if (phase === "results" && results) {
     return (
       <ResultsStep
         results={results}
         saving={saving}
+        usedScan={usedScan}
         onBack={() => {
-          setPhase("follow_up");
-          setFollowUpIndex(FOLLOW_UP_QUESTIONS.length - 1);
+          if (fromScan) {
+            navigate("/scan?from=onboarding", { replace: true });
+          } else {
+            setPhase("scan_option");
+          }
         }}
         onConfirm={handleSaveAndGoHome}
         isEditMode={isEditMode}
