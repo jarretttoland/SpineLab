@@ -151,7 +151,6 @@ export default function ScanResults({
   onRetakeLibrary,
   detectionFailed = false,
 
-  // Only used for onboarding scan flow
   showContinueButton = false,
   onContinue = null,
   continueLabel = "See Total Spine Score",
