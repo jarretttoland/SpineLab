@@ -578,7 +578,10 @@ export default function Onboarding() {
   const params = new URLSearchParams(location.search);
   const isEditMode =
     location.state?.isEditMode === true || params.get("edit") === "true";
-  const fromScan = params.get("fromScan") === "true";
+
+  const fromScan =
+    params.get("fromScan") === "true" ||
+    location.state?.fromScan === true;
 
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [user, setUser] = useState(null);
@@ -719,11 +722,7 @@ export default function Onboarding() {
           const generatedResults = generateResultsFromProfile(profileData);
 
           setResults(generatedResults);
-
-          // Critical fix: force post-scan onboarding mode so the app shows
-          // the final total Spine Score / plan page instead of restarting onboarding.
           setUsedScan(true);
-
           setPhase("results");
           setLoadingProfile(false);
           return;
@@ -1029,7 +1028,10 @@ export default function Onboarding() {
       setResults(estimatedResults);
       await saveProfile({ complete: false, resultOverride: estimatedResults });
 
-      navigate("/onboarding-scan?from=onboarding", { replace: true });
+      navigate("/onboarding-scan?from=onboarding", {
+        replace: true,
+        state: { fromOnboarding: true },
+      });
     } catch (err) {
       console.error("[Onboarding] save before scan error:", err);
       alert("We couldn't save your plan before the scan. Please try again.");
@@ -1211,7 +1213,10 @@ export default function Onboarding() {
         usedScan={usedScan}
         onBack={() => {
           if (fromScan) {
-            navigate("/onboarding-scan?from=onboarding", { replace: true });
+            navigate("/onboarding-scan?from=onboarding", {
+              replace: true,
+              state: { fromOnboarding: true },
+            });
           } else {
             setPhase("scan_option");
           }

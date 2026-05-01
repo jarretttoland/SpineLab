@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import LandmarkGuide from "@/components/posture/LandmarkGuide";
 import CaptureScreen from "@/components/posture/CaptureScreen";
@@ -13,6 +14,15 @@ import {
 } from "@/lib/postureScanSupabase";
 
 export default function PostureScan() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const params = new URLSearchParams(location.search);
+
+  const fromOnboarding =
+    params.get("from") === "onboarding" ||
+    location.pathname === "/onboarding-scan";
+
   const [phase, setPhase] = useState("guide");
   const [scanData, setScanData] = useState(null);
   const [detectionFailed, setDetectionFailed] = useState(false);
@@ -38,6 +48,7 @@ export default function PostureScan() {
         ]);
 
         if (!isMounted) return;
+
         setProfile(profileData);
         setPreviousScans(scans);
       } catch (err) {
@@ -58,10 +69,14 @@ export default function PostureScan() {
     if (!keyLandmarks || Object.keys(keyLandmarks).length === 0) {
       setDetectionFailed(true);
 
-      const previousStructural = profile?.structural_score ?? profile?.spine_score ?? 50;
+      const previousStructural =
+        profile?.structural_score ?? profile?.spine_score ?? 50;
       const consistencyScore = profile?.consistency_score ?? 50;
       const previousSpineScore = profile?.spine_score ?? 50;
-      const newSpineScore = Math.round(previousStructural * 0.7 + consistencyScore * 0.3);
+
+      const newSpineScore = Math.round(
+        previousStructural * 0.7 + consistencyScore * 0.3
+      );
 
       setScanData({
         imageUrl: imageUrl || "",
@@ -110,6 +125,7 @@ export default function PostureScan() {
     }
 
     let trend = null;
+
     if (previousScans.length > 0) {
       const normalizedPrev = (previousScans[0]?.issues || []).map((f) => ({
         severity:
@@ -119,12 +135,14 @@ export default function PostureScan() {
             ? "moderate"
             : "mild",
       }));
+
       trend = compareTrend(findings, normalizedPrev);
     }
 
     const today = format(new Date(), "yyyy-MM-dd");
 
-    const previousStructural = profile?.structural_score ?? profile?.spine_score ?? 50;
+    const previousStructural =
+      profile?.structural_score ?? profile?.spine_score ?? 50;
     const consistencyScore = profile?.consistency_score ?? 50;
     const previousSpineScore = profile?.spine_score ?? 50;
 
@@ -222,6 +240,7 @@ export default function PostureScan() {
     }
 
     setDetectionFailed(false);
+
     setScanData({
       imageUrl,
       imagePath,
@@ -252,6 +271,13 @@ export default function PostureScan() {
     setScanData(null);
     setDetectionFailed(false);
     setPhase("capture");
+  };
+
+  const handleSeeTotalSpineScore = () => {
+    navigate("/onboarding?fromScan=true", {
+      replace: true,
+      state: { fromScan: true },
+    });
   };
 
   if (bootError) {
@@ -304,6 +330,13 @@ export default function PostureScan() {
         onNewScan={handleNewScan}
         onRetakeCamera={handleRetake}
         onRetakeLibrary={handleRetake}
+        showContinueButton={location.pathname === "/onboarding-scan"}
+        onContinue={
+          location.pathname === "/onboarding-scan"
+            ? handleSeeTotalSpineScore
+            : null
+        }
+        continueLabel="See Total Spine Score"
       />
     );
   }
