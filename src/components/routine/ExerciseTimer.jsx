@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CheckCircle2,
   Wind,
+  RefreshCw,
 } from "lucide-react";
 import ExerciseMedia from "./ExerciseMedia";
 
@@ -31,7 +32,7 @@ const BREATH_EXHALE = 5;
 const BREATH_CYCLE = BREATH_INHALE + BREATH_EXHALE;
 const TOTAL_BREATHS = 6;
 
-// List of exercises that use a countdown hold timer
+// Hold exercises with a countdown timer (Chin Tuck removed — it's reps now)
 const HOLD_EXERCISES = [
   "Side Plank",
   "Forward Head Posture Hold",
@@ -41,9 +42,33 @@ const HOLD_EXERCISES = [
   "Hip Flexor Stretch",
   "Bent Arm Chest Stretch",
   "Sitting Neck Flexion Stretch",
-  "Chin Tuck",
   "Kneeling Thoracic Spine Extension",
 ];
+
+// These exercises split durationSecs into two sides
+const PER_SIDE_EXERCISES = [
+  "Side Plank",
+  "Hip Flexor Stretch",
+  "Bent Arm Chest Stretch",
+  "Single Leg Glute Bridge",
+];
+
+// Parse sets and per-set seconds from dosage string e.g. "2 x 30s hold" or "2 x 20s each side"
+function parseDosage(exercise) {
+  const dosage = exercise.dosage || "";
+  const match = dosage.match(/(\d+)\s*x\s*(\d+)s/);
+  if (match) {
+    return {
+      sets: parseInt(match[1], 10),
+      secsPerSet: parseInt(match[2], 10),
+    };
+  }
+  // fallback: 1 set using durationSecs
+  return {
+    sets: 1,
+    secsPerSet: exercise.durationSecs || 30,
+  };
+}
 
 function BreathingTimer() {
   const totalSecs = TOTAL_BREATHS * BREATH_CYCLE;
@@ -153,14 +178,29 @@ function BreathingTimer() {
 }
 
 function HoldTimer({ exercise }) {
-  const totalSecs = exercise.durationSecs || 30;
+  const isPerSide = PER_SIDE_EXERCISES.includes(exercise.name);
+  const { sets, secsPerSet } = parseDosage(exercise);
+
   const category = exercise.category || "mobility";
   const style = HOLD_CATEGORY_STYLES[category] || HOLD_CATEGORY_STYLES.mobility;
 
-  const [secondsLeft, setSecondsLeft] = useState(totalSecs);
+  // For per-side: each "set" = one side, so total stages = sets * 2 sides
+  // For regular: total stages = sets
+  const totalStages = isPerSide ? sets * 2 : sets;
+
+  const [stage, setStage] = useState(0); // 0-indexed current stage
+  const [secondsLeft, setSecondsLeft] = useState(secsPerSet);
   const [running, setRunning] = useState(false);
-  const [done, setDone] = useState(false);
+  const [stageDone, setStageDone] = useState(false); // current stage finished
+  const [allDone, setAllDone] = useState(false);
   const intervalRef = useRef(null);
+
+  // Reset timer when stage changes
+  useEffect(() => {
+    setSecondsLeft(secsPerSet);
+    setRunning(false);
+    setStageDone(false);
+  }, [stage, secsPerSet]);
 
   useEffect(() => {
     if (!running) {
@@ -172,7 +212,7 @@ function HoldTimer({ exercise }) {
         if (s <= 1) {
           clearInterval(intervalRef.current);
           setRunning(false);
-          setDone(true);
+          setStageDone(true);
           return 0;
         }
         return s - 1;
@@ -181,9 +221,60 @@ function HoldTimer({ exercise }) {
     return () => clearInterval(intervalRef.current);
   }, [running]);
 
+  const handleNextStage = () => {
+    const nextStage = stage + 1;
+    if (nextStage >= totalStages) {
+      setAllDone(true);
+    } else {
+      setStage(nextStage);
+    }
+  };
+
   const R = 34;
   const circumference = 2 * Math.PI * R;
-  const progress = 1 - secondsLeft / totalSecs;
+  const progress = 1 - secondsLeft / secsPerSet;
+
+  // Label for current stage
+  function getStageLabel() {
+    if (allDone) return "All sets complete!";
+    if (stageDone) {
+      if (isPerSide) {
+        const side = stage % 2 === 0 ? "left" : "right";
+        const nextSide = side === "left" ? "right" : "left";
+        if (stage + 1 < totalStages) return `${side === "left" ? "Left" : "Right"} side done — switch to ${nextSide}`;
+        return "Hold complete!";
+      }
+      const setNum = stage + 1;
+      if (setNum < sets) return `Set ${setNum} done — rest, then start set ${setNum + 1}`;
+      return "All sets complete!";
+    }
+    if (isPerSide) {
+      const side = stage % 2 === 0 ? "Left" : "Right";
+      return running ? `${side} side — hold steady` : `${side} side — press play`;
+    }
+    const setNum = stage + 1;
+    return running ? `Set ${setNum} of ${sets} — hold steady` : `Set ${setNum} of ${sets} — press play`;
+  }
+
+  // Dot indicators
+  function renderDots() {
+    return (
+      <div className="flex items-center gap-1 mb-2">
+        {Array.from({ length: totalStages }).map((_, i) => (
+          <div
+            key={i}
+            className={`rounded-full transition-all duration-300 ${
+              i === stage && !allDone
+                ? "w-4 h-2 bg-current opacity-100"
+                : i < stage || allDone
+                ? "w-2 h-2 bg-current opacity-40"
+                : "w-2 h-2 bg-current opacity-20"
+            }`}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className={`rounded-3xl border p-4 ${style.bg}`}>
@@ -193,16 +284,18 @@ function HoldTimer({ exercise }) {
             <circle cx="50" cy="50" r={R} fill="none" stroke="hsl(var(--secondary))" strokeWidth="7" />
             <motion.circle
               cx="50" cy="50" r={R} fill="none"
-              stroke={style.ring}
+              stroke={allDone ? style.ring : style.ring}
               strokeWidth="7" strokeLinecap="round"
               strokeDasharray={circumference}
-              animate={{ strokeDashoffset: circumference * (1 - progress) }}
+              animate={{ strokeDashoffset: circumference * (1 - (allDone ? 1 : progress)) }}
               transition={{ duration: 0.5, ease: "linear" }}
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {done ? (
+            {allDone ? (
               <CheckCircle2 className={`w-6 h-6 ${style.text}`} />
+            ) : stageDone ? (
+              <RefreshCw className={`w-5 h-5 ${style.text}`} />
             ) : (
               <>
                 <span className={`text-lg font-black leading-none ${style.text}`}>{secondsLeft}</span>
@@ -213,23 +306,23 @@ function HoldTimer({ exercise }) {
         </div>
 
         <div className="flex-1 min-w-0">
+          <div className={style.text}>
+            {renderDots()}
+          </div>
+
           <AnimatePresence mode="wait">
             <motion.p
-              key={done ? "done" : running ? "holding" : "ready"}
+              key={`${stage}-${stageDone}-${allDone}`}
               initial={{ opacity: 0, y: 3 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               className={`text-sm font-semibold mb-2 ${style.text}`}
             >
-              {done
-                ? "Hold complete!"
-                : running
-                ? "Hold steady — breathe normally"
-                : "Press play to start timer"}
+              {getStageLabel()}
             </motion.p>
           </AnimatePresence>
 
-          {running && !done && (
+          {running && !stageDone && !allDone && (
             <div className="w-full h-2 bg-secondary rounded-full overflow-hidden mb-3">
               <motion.div
                 className={`h-full rounded-full ${style.bar}`}
@@ -239,15 +332,30 @@ function HoldTimer({ exercise }) {
             </div>
           )}
 
-          <button
-            onClick={() => !done && setRunning((r) => !r)}
-            disabled={done}
-            className={`w-11 h-11 rounded-full flex items-center justify-center shadow transition-all active:scale-95 disabled:opacity-40 ${
-              running ? "bg-secondary text-foreground" : "bg-primary text-primary-foreground"
-            }`}
-          >
-            {running ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 translate-x-0.5" />}
-          </button>
+          {/* Show play/pause while timer is running or not yet started */}
+          {!stageDone && !allDone && (
+            <button
+              onClick={() => setRunning((r) => !r)}
+              className={`w-11 h-11 rounded-full flex items-center justify-center shadow transition-all active:scale-95 ${
+                running ? "bg-secondary text-foreground" : "bg-primary text-primary-foreground"
+              }`}
+            >
+              {running ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 translate-x-0.5" />}
+            </button>
+          )}
+
+          {/* Show next-set / switch-side button after each stage completes */}
+          {stageDone && !allDone && (
+            <button
+              onClick={handleNextStage}
+              className="px-4 h-11 rounded-full flex items-center gap-2 bg-primary text-primary-foreground text-sm font-semibold shadow transition-all active:scale-95"
+            >
+              {isPerSide
+                ? stage % 2 === 0 ? "Switch sides" : sets > 1 && stage + 1 < totalStages ? "Next set" : "Done"
+                : "Start next set"}
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -326,10 +434,10 @@ export default function ExerciseTimer({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -30 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className="fixed inset-0 bg-background"
+      className="fixed inset-0 bg-background overflow-y-auto"
     >
-      <div className="max-w-lg mx-auto h-full flex flex-col px-4 pt-4 pb-6">
-        <div className="h-1 bg-secondary rounded-full overflow-hidden mb-3 shrink-0">
+      <div className="max-w-lg mx-auto flex flex-col px-4 pt-4 pb-8">
+        <div className="h-1 bg-secondary rounded-full overflow-hidden mb-3">
           <motion.div
             className="h-full bg-primary"
             initial={{ width: 0 }}
@@ -338,7 +446,7 @@ export default function ExerciseTimer({
           />
         </div>
 
-        <div className="flex items-center justify-between mb-2 shrink-0">
+        <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold text-muted-foreground">
             {exerciseIndex + 1} / {totalExercises}
           </span>
@@ -347,12 +455,12 @@ export default function ExerciseTimer({
           </span>
         </div>
 
-        <div className="mb-3 shrink-0">
+        <div className="mb-3">
           <h1 className="text-xl font-bold tracking-tight leading-tight">{exercise.name}</h1>
           <p className="text-sm text-muted-foreground mt-1">{exercise.dosage}</p>
         </div>
 
-        <div className="space-y-3 overflow-y-auto pb-2">
+        <div className="space-y-3 pb-2">
           {isBreathing ? (
             <BreathingTimer />
           ) : isHold ? (

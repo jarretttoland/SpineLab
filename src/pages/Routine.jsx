@@ -345,7 +345,6 @@ function withLevel(exercise, level) {
     "Hip Flexor Stretch",
     "Bent Arm Chest Stretch",
     "Sitting Neck Flexion Stretch",
-    "Chin Tuck",
     "Kneeling Thoracic Spine Extension",
   ];
 
@@ -354,6 +353,7 @@ function withLevel(exercise, level) {
     "Bird Dog",
     "Dead Bug",
     "Pelvic Tilt",
+    "Chin Tuck",
     "Shoulder Lateral Rotation",
     "Cat Cow Stretch",
     "Standing Scapular External Rotation",
