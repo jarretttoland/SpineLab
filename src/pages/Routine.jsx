@@ -19,26 +19,26 @@ import DailyAdjustSheet from "@/components/routine/DailyAdjustSheet";
 import { supabase } from "@/lib/supabase";
 
 const STORAGE_KEYS = {
-  rewardPoints: "spinelab_reward_points",
-  routineDayKey: "spinelab_routine_day_key",
-  lockedDayIndex: "spinelab_locked_day_index",
+  rewardPoints:    "spinelab_reward_points",
+  routineDayKey:   "spinelab_routine_day_key",
+  lockedDayIndex:  "spinelab_locked_day_index",
   completedDayKey: "spinelab_completed_day_key",
 };
 
 const CATEGORY_COLORS = {
   breathing: "bg-sky-100 text-sky-700 border-sky-200",
-  posture: "bg-violet-100 text-violet-700 border-violet-200",
-  mobility: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  posture:   "bg-violet-100 text-violet-700 border-violet-200",
+  mobility:  "bg-emerald-100 text-emerald-700 border-emerald-200",
   stability: "bg-orange-100 text-orange-700 border-orange-200",
-  strength: "bg-rose-100 text-rose-700 border-rose-200",
+  strength:  "bg-rose-100 text-rose-700 border-rose-200",
 };
 
 const CATEGORY_LABELS = {
   breathing: "Breathing",
-  posture: "Posture",
-  mobility: "Mobility",
+  posture:   "Posture",
+  mobility:  "Mobility",
   stability: "Stability",
-  strength: "Strength",
+  strength:  "Strength",
 };
 
 function loadLocalJSON(key, fallback) {
@@ -78,13 +78,13 @@ function getStreakReward(streak) {
 
 function getProgressMessage(streak) {
   if (streak >= 13) return "You're building real momentum. Keep it rolling.";
-  if (streak >= 6) return "One more strong week and this starts becoming a habit.";
-  if (streak >= 2) return "Nice work. Consistency is starting to stack.";
+  if (streak >= 6)  return "One more strong week and this starts becoming a habit.";
+  if (streak >= 2)  return "Nice work. Consistency is starting to stack.";
   return "Start today and build your first streak.";
 }
 
 function getTodayFocus(planType) {
-  if (planType === "neck") return "Neck + posture reset";
+  if (planType === "neck")     return "Neck + posture reset";
   if (planType === "mid_back") return "Upper back + posture opening";
   if (planType === "low_back") return "Core + pelvic support";
   return "Balanced spine support";
@@ -309,27 +309,9 @@ function withLevel(exercise, level) {
   const base = { ...exercise };
 
   const config = {
-    easy: {
-      hold: 20,
-      reps: 6,
-      sets: 1,
-      perSideHold: 15,
-      perSideReps: 5,
-    },
-    moderate: {
-      hold: 30,
-      reps: 10,
-      sets: 2,
-      perSideHold: 20,
-      perSideReps: 8,
-    },
-    hard: {
-      hold: 45,
-      reps: 14,
-      sets: 2,
-      perSideHold: 30,
-      perSideReps: 10,
-    },
+    easy:     { hold: 20, reps: 6,  sets: 1, perSideHold: 15, perSideReps: 5  },
+    moderate: { hold: 30, reps: 10, sets: 2, perSideHold: 20, perSideReps: 8  },
+    hard:     { hold: 45, reps: 14, sets: 2, perSideHold: 30, perSideReps: 10 },
   };
 
   const c = config[level] || config.moderate;
@@ -348,7 +330,6 @@ function withLevel(exercise, level) {
     "Kneeling Thoracic Spine Extension",
   ];
 
-  // Rep exercises that alternate sides — dosage shows "per side"
   const perSideRepExercises = [
     "Seated Upright Twists",
     "Bird Dog",
@@ -356,7 +337,6 @@ function withLevel(exercise, level) {
     "Shoulder Lateral Rotation",
   ];
 
-  // Rep exercises that are not per-side
   const repExercises = [
     "Glute Bridge",
     "Pelvic Tilt",
@@ -411,23 +391,22 @@ function withLevel(exercise, level) {
 
 function normalizeExercise(ex, index = 0) {
   return {
-    id: ex?.id || `${ex?.name || "exercise"}-${index}`,
-    name: ex?.name || "Exercise",
-    category: ex?.category || "mobility",
+    id:           ex?.id || `${ex?.name || "exercise"}-${index}`,
+    name:         ex?.name || "Exercise",
+    category:     ex?.category || "mobility",
     durationSecs: ex?.durationSecs || 30,
-    dosage: ex?.dosage || "",
+    dosage:       ex?.dosage || "",
     instructions:
       Array.isArray(ex?.instructions) && ex.instructions.length
         ? ex.instructions
         : ["Move slowly and stay controlled."],
     video: ex?.video || "",
-    gif: ex?.gif || "",
+    gif:   ex?.gif   || "",
     image: ex?.image || "",
   };
 }
 
 function getChairOnlyPlan() {
-  // Bent Arm Chest Stretch removed — requires standing against a wall
   return [
     "360 Breathing",
     "Sitting Neck Flexion Stretch",
@@ -440,75 +419,21 @@ function getChairOnlyPlan() {
 function getPlanTemplate(planType, dayIndex) {
   const plans = {
     neck: [
-      [
-        "360 Breathing",
-        "Chin Tuck",
-        "Forward Head Posture Hold",
-        "Bent Arm Chest Stretch",
-        "Wall Angels Standing",
-      ],
-      [
-        "360 Breathing",
-        "Sitting Neck Flexion Stretch",
-        "Standing Scapular External Rotation",
-        "Seated Upright Twists",
-        "Bent Arm Chest Stretch",
-      ],
+      ["360 Breathing", "Chin Tuck", "Forward Head Posture Hold", "Bent Arm Chest Stretch", "Wall Angels Standing"],
+      ["360 Breathing", "Sitting Neck Flexion Stretch", "Standing Scapular External Rotation", "Seated Upright Twists", "Bent Arm Chest Stretch"],
     ],
     mid_back: [
-      [
-        "360 Breathing",
-        "Wall Angels Standing",
-        "Kneeling Thoracic Spine Extension",
-        "Lying Floor Row Hold",
-        "Bent Arm Chest Stretch",
-      ],
-      [
-        "360 Breathing",
-        "Seated Upright Twists",
-        "Sitting Thoracic Spine Flexion",
-        "Standing Scapular External Rotation",
-        "Wall Angels Standing",
-      ],
+      ["360 Breathing", "Wall Angels Standing", "Kneeling Thoracic Spine Extension", "Lying Floor Row Hold", "Bent Arm Chest Stretch"],
+      ["360 Breathing", "Seated Upright Twists", "Sitting Thoracic Spine Flexion", "Standing Scapular External Rotation", "Wall Angels Standing"],
     ],
     low_back: [
-      [
-        "360 Breathing",
-        "Pelvic Tilt",
-        "Dead Bug",
-        "Glute Bridge",
-        "Cat Cow Stretch",
-      ],
-      [
-        "360 Breathing",
-        "Bird Dog",
-        "Side Plank",
-        "Single Leg Glute Bridge",
-        "Pelvic Tilt",
-      ],
+      ["360 Breathing", "Pelvic Tilt", "Dead Bug", "Glute Bridge", "Cat Cow Stretch"],
+      ["360 Breathing", "Bird Dog", "Side Plank", "Single Leg Glute Bridge", "Pelvic Tilt"],
     ],
     balanced: [
-      [
-        "360 Breathing",
-        "Chin Tuck",
-        "Seated Upright Twists",
-        "Glute Bridge",
-        "Wall Angels Standing",
-      ],
-      [
-        "360 Breathing",
-        "Forward Head Posture Hold",
-        "Kneeling Thoracic Spine Extension",
-        "Bird Dog",
-        "Bent Arm Chest Stretch",
-      ],
-      [
-        "360 Breathing",
-        "Sitting Neck Flexion Stretch",
-        "Sitting Thoracic Spine Flexion",
-        "Dead Bug",
-        "Standing Scapular External Rotation",
-      ],
+      ["360 Breathing", "Chin Tuck", "Seated Upright Twists", "Glute Bridge", "Wall Angels Standing"],
+      ["360 Breathing", "Forward Head Posture Hold", "Kneeling Thoracic Spine Extension", "Bird Dog", "Bent Arm Chest Stretch"],
+      ["360 Breathing", "Sitting Neck Flexion Stretch", "Sitting Thoracic Spine Flexion", "Dead Bug", "Standing Scapular External Rotation"],
     ],
   };
 
@@ -519,7 +444,6 @@ function getPlanTemplate(planType, dayIndex) {
 function getExerciseObjects(planType, dayIndex, level, chairOnly) {
   const library = buildExerciseLibrary();
   const names = chairOnly ? getChairOnlyPlan() : getPlanTemplate(planType, dayIndex);
-
   return names.map((name, index) =>
     normalizeExercise(
       withLevel(library[name] || { name, category: "mobility" }, level),
@@ -529,31 +453,33 @@ function getExerciseObjects(planType, dayIndex, level, chairOnly) {
 }
 
 function getNextHigherLevel(level) {
-  if (level === "easy") return "moderate";
+  if (level === "easy")     return "moderate";
   if (level === "moderate") return "hard";
   return "hard";
 }
 
 function getNextLowerLevel(level) {
-  if (level === "hard") return "moderate";
+  if (level === "hard")     return "moderate";
   if (level === "moderate") return "easy";
   return "easy";
 }
 
 export default function Routine() {
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
+  const [user, setUser]       = useState(null);
   const [profile, setProfile] = useState(null);
 
-  const [sessionActive, setSessionActive] = useState(false);
+  const [sessionActive,    setSessionActive]    = useState(false);
   const [selectedExercise, setSelectedExercise] = useState(null);
   const [routineCompleted, setRoutineCompleted] = useState(false);
-  const [rewardPoints, setRewardPoints] = useState(0);
-  const [earnedToday, setEarnedToday] = useState(null);
-  const [showAdjuster, setShowAdjuster] = useState(false);
-  const [chairOnlyToday, setChairOnlyToday] = useState(false);
+  const [rewardPoints,     setRewardPoints]     = useState(0);
+  const [earnedToday,      setEarnedToday]      = useState(null);
+  const [showAdjuster,     setShowAdjuster]     = useState(false);
+  const [chairOnlyToday,   setChairOnlyToday]   = useState(false);
+  const [scoreSnapshot,    setScoreSnapshot]    = useState(null);
+  const [completedScores,  setCompletedScores]  = useState(null);
 
-  const [todayKey, setTodayKey] = useState(getTodayKey());
+  const [todayKey,       setTodayKey]       = useState(getTodayKey());
   const [lockedDayIndex, setLockedDayIndex] = useState(0);
 
   useEffect(() => {
@@ -564,10 +490,10 @@ export default function Routine() {
 
         setChairOnlyToday(false);
 
-        const storedDayKey = loadLocalJSON(STORAGE_KEYS.routineDayKey, null);
-        const storedLockedDayIndex = loadLocalJSON(STORAGE_KEYS.lockedDayIndex, null);
+        const storedDayKey         = loadLocalJSON(STORAGE_KEYS.routineDayKey,   null);
+        const storedLockedDayIndex = loadLocalJSON(STORAGE_KEYS.lockedDayIndex,  null);
         const storedCompletedDayKey = loadLocalJSON(STORAGE_KEYS.completedDayKey, null);
-        const currentDayKey = getTodayKey();
+        const currentDayKey        = getTodayKey();
 
         setTodayKey(currentDayKey);
         setRoutineCompleted(storedCompletedDayKey === currentDayKey);
@@ -592,17 +518,14 @@ export default function Routine() {
         if (error) throw error;
         setProfile(data || null);
 
-        const currentStreak = data?.current_streak || 0;
+        const currentStreak    = data?.current_streak || 0;
         const computedDayIndex = currentStreak % 7;
 
-        if (
-          storedDayKey === currentDayKey &&
-          typeof storedLockedDayIndex === "number"
-        ) {
+        if (storedDayKey === currentDayKey && typeof storedLockedDayIndex === "number") {
           setLockedDayIndex(storedLockedDayIndex);
         } else {
           setLockedDayIndex(computedDayIndex);
-          saveLocalJSON(STORAGE_KEYS.routineDayKey, currentDayKey);
+          saveLocalJSON(STORAGE_KEYS.routineDayKey,  currentDayKey);
           saveLocalJSON(STORAGE_KEYS.lockedDayIndex, computedDayIndex);
         }
       } catch (err) {
@@ -622,28 +545,24 @@ export default function Routine() {
   useEffect(() => {
     const interval = setInterval(() => {
       const newTodayKey = getTodayKey();
-
       if (newTodayKey !== todayKey) {
         setTodayKey(newTodayKey);
-
         const nextDayIndex = (profile?.current_streak || 0) % 7;
         setLockedDayIndex(nextDayIndex);
         setRoutineCompleted(false);
         setEarnedToday(null);
         setChairOnlyToday(false);
-
-        saveLocalJSON(STORAGE_KEYS.routineDayKey, newTodayKey);
-        saveLocalJSON(STORAGE_KEYS.lockedDayIndex, nextDayIndex);
+        saveLocalJSON(STORAGE_KEYS.routineDayKey,   newTodayKey);
+        saveLocalJSON(STORAGE_KEYS.lockedDayIndex,  nextDayIndex);
         saveLocalJSON(STORAGE_KEYS.completedDayKey, null);
       }
     }, 60000);
-
     return () => clearInterval(interval);
   }, [todayKey, profile]);
 
-  const streak = profile?.current_streak || 0;
-  const dayIndex = lockedDayIndex;
-  const planType = profile?.plan_type || "balanced";
+  const streak       = profile?.current_streak || 0;
+  const dayIndex     = lockedDayIndex;
+  const planType     = profile?.plan_type     || "balanced";
   const routineLevel = profile?.routine_level || "moderate";
   const effectiveLevel = chairOnlyToday ? "easy" : routineLevel;
 
@@ -655,11 +574,8 @@ export default function Routine() {
     exercises.reduce((sum, ex) => sum + (ex.durationSecs || 0), 0) / 60
   );
 
-  const todayFocus = chairOnlyToday
-    ? "Chair-only recovery day"
-    : getTodayFocus(planType);
-
-  const progressMsg = getProgressMessage(streak);
+  const todayFocus   = chairOnlyToday ? "Chair-only recovery day" : getTodayFocus(planType);
+  const progressMsg  = getProgressMessage(streak);
   const streakReward = getStreakReward(streak);
 
   const handleTooEasy = async () => {
@@ -696,9 +612,7 @@ export default function Routine() {
     }
   };
 
-  const handleChairOnly = () => {
-    setChairOnlyToday(true);
-  };
+  const handleChairOnly = () => setChairOnlyToday(true);
 
   const handleWorkoutComplete = async () => {
     if (routineCompleted) {
@@ -706,18 +620,22 @@ export default function Routine() {
       return;
     }
 
-    setSessionActive(false);
-    setRoutineCompleted(true);
-    setEarnedToday(streakReward);
-    setRewardPoints((prev) => prev + streakReward.points);
-
     if (!user?.id || !profile) return;
 
     try {
       const previousConsistency = Number(profile?.consistency_score ?? 50);
-      const structuralScore = Number(profile?.structural_score ?? 50);
-      const previousMobility = Number(profile?.mobility_score ?? 50);
-      const previousStrength = Number(profile?.strength_score ?? 50);
+      const structuralScore     = Number(profile?.structural_score  ?? 50);
+      const previousMobility    = Number(profile?.mobility_score    ?? 50);
+      const previousStrength    = Number(profile?.strength_score    ?? 50);
+      const previousSpineScore  = Number(profile?.spine_score       ?? 0);
+
+      // Snapshot BEFORE scores change
+      setScoreSnapshot({
+        spineScore:       previousSpineScore,
+        mobilityScore:    previousMobility,
+        strengthScore:    previousStrength,
+        consistencyScore: previousConsistency,
+      });
 
       const mobilityCount = exercises.filter((e) => e.category === "mobility").length;
       const strengthCount = exercises.filter(
@@ -725,35 +643,33 @@ export default function Routine() {
       ).length;
 
       const newConsistency = Math.min(100, previousConsistency + 2);
-      const newMobility = Math.min(100, previousMobility + mobilityCount * 0.8);
-      const newStrength = Math.min(100, previousStrength + strengthCount * 0.8);
+      const newMobility    = Math.min(100, previousMobility + mobilityCount * 0.8);
+      const newStrength    = Math.min(100, previousStrength + strengthCount * 0.8);
 
       const newSpineScore = Math.round(
         structuralScore * 0.4 +
           newConsistency * 0.2 +
-          newMobility * 0.2 +
-          newStrength * 0.2
+          newMobility    * 0.2 +
+          newStrength    * 0.2
       );
 
-      const newStreak = (profile?.current_streak || 0) + 1;
+      const newStreak        = (profile?.current_streak || 0) + 1;
       const newLongestStreak = Math.max(newStreak, profile?.longest_streak || 0);
 
       let nextLevel = profile?.routine_level || "moderate";
-      if (newStreak % 7 === 0) {
-        nextLevel = getNextHigherLevel(nextLevel);
-      }
+      if (newStreak % 7 === 0) nextLevel = getNextHigherLevel(nextLevel);
 
       const { data, error } = await supabase
         .from("profiles")
         .update({
           consistency_score: Math.round(newConsistency),
-          mobility_score: Math.round(newMobility),
-          strength_score: Math.round(newStrength),
-          spine_score: newSpineScore,
-          current_streak: newStreak,
-          longest_streak: newLongestStreak,
-          routine_level: nextLevel,
-          updated_at: new Date().toISOString(),
+          mobility_score:    Math.round(newMobility),
+          strength_score:    Math.round(newStrength),
+          spine_score:       newSpineScore,
+          current_streak:    newStreak,
+          longest_streak:    newLongestStreak,
+          routine_level:     nextLevel,
+          updated_at:        new Date().toISOString(),
         })
         .eq("id", user.id)
         .select()
@@ -762,10 +678,21 @@ export default function Routine() {
       if (error) throw error;
       setProfile(data);
 
+      // Store new scores for celebration screen
+      setCompletedScores({
+        spineScore:       newSpineScore,
+        mobilityScore:    Math.round(newMobility),
+        strengthScore:    Math.round(newStrength),
+        consistencyScore: Math.round(newConsistency),
+      });
+
+      setRoutineCompleted(true);
+      setEarnedToday(streakReward);
+      setRewardPoints((prev) => prev + streakReward.points);
       setChairOnlyToday(false);
 
-      saveLocalJSON(STORAGE_KEYS.routineDayKey, todayKey);
-      saveLocalJSON(STORAGE_KEYS.lockedDayIndex, dayIndex);
+      saveLocalJSON(STORAGE_KEYS.routineDayKey,   todayKey);
+      saveLocalJSON(STORAGE_KEYS.lockedDayIndex,  dayIndex);
       saveLocalJSON(STORAGE_KEYS.completedDayKey, todayKey);
     } catch (err) {
       console.error("[Routine] complete error:", err);
@@ -799,7 +726,9 @@ export default function Routine() {
         exercises={exercises}
         dayOfPlan={dayIndex + 1}
         streak={streak}
-        onComplete={handleWorkoutComplete}
+        scoreSnapshot={scoreSnapshot}
+        newScores={completedScores}
+        onComplete={() => setSessionActive(false)}
         onExit={() => setSessionActive(false)}
       />
     );
@@ -844,18 +773,15 @@ export default function Routine() {
           <span className="text-xs font-semibold bg-secondary text-foreground/70 px-2.5 py-1 rounded-xl border border-border capitalize">
             {chairOnlyToday ? "chair only" : routineLevel}
           </span>
-
           <span className="text-xs font-semibold bg-secondary text-foreground/70 px-2.5 py-1 rounded-xl border border-border capitalize">
             {planType.replace("_", " ")}
           </span>
-
           {streak > 0 && (
             <span className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1 rounded-xl border border-primary/10">
               <Flame className="w-3 h-3" />
               {streak} day streak
             </span>
           )}
-
           <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-xl border border-amber-200">
             <Star className="w-3 h-3" />
             {rewardPoints} pts
@@ -877,21 +803,15 @@ export default function Routine() {
 
           <div className="grid grid-cols-3 gap-2 mt-4">
             <div className="rounded-2xl bg-secondary/70 px-3 py-3">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">
-                Time
-              </p>
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Time</p>
               <p className="text-sm font-bold">~{totalMins} min</p>
             </div>
             <div className="rounded-2xl bg-secondary/70 px-3 py-3">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">
-                Moves
-              </p>
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Moves</p>
               <p className="text-sm font-bold">{exercises.length}</p>
             </div>
             <div className="rounded-2xl bg-secondary/70 px-3 py-3">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">
-                Reward
-              </p>
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Reward</p>
               <p className="text-sm font-bold">{streakReward.label}</p>
             </div>
           </div>
@@ -921,18 +841,14 @@ export default function Routine() {
               <div className="w-16 h-16 shrink-0 rounded-2xl overflow-hidden border border-border bg-white dark:bg-slate-950">
                 <ExerciseMedia exercise={ex} className="w-full h-full" />
               </div>
-
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="text-[10px] font-bold text-muted-foreground">
                     {String(i + 1).padStart(2, "0")}
                   </span>
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                      CATEGORY_COLORS[ex.category] ||
-                      "bg-secondary text-muted-foreground border-border"
-                    }`}
-                  >
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                    CATEGORY_COLORS[ex.category] || "bg-secondary text-muted-foreground border-border"
+                  }`}>
                     {CATEGORY_LABELS[ex.category] || ex.category}
                   </span>
                   {i === 0 && (
@@ -946,7 +862,6 @@ export default function Routine() {
                   {ex.dosage || ex.instructions?.[0] || "Move slowly and stay controlled."}
                 </p>
               </div>
-
               <div className="text-right shrink-0">
                 <p className="text-xs font-semibold text-foreground/80">
                   {formatDuration(ex.durationSecs)}
