@@ -77,7 +77,7 @@ function getStreakReward(streak) {
 }
 
 function getProgressMessage(streak) {
-  if (streak >= 13) return "You’re building real momentum. Keep it rolling.";
+  if (streak >= 13) return "You're building real momentum. Keep it rolling.";
   if (streak >= 6) return "One more strong week and this starts becoming a habit.";
   if (streak >= 2) return "Nice work. Consistency is starting to stack.";
   return "Start today and build your first streak.";
@@ -339,7 +339,6 @@ function withLevel(exercise, level) {
   const holdExercises = [
     "Side Plank",
     "Forward Head Posture Hold",
-    "Wall Angels Standing",
     "Single Leg Glute Bridge",
     "Lying Floor Row Hold",
     "Holding Squat",
@@ -358,6 +357,7 @@ function withLevel(exercise, level) {
     "Shoulder Lateral Rotation",
     "Cat Cow Stretch",
     "Standing Scapular External Rotation",
+    "Wall Angels Standing",
     "Seated Upright Twists",
     "Sitting Thoracic Spine Flexion",
   ];
@@ -652,20 +652,14 @@ export default function Routine() {
 
   const handleTooEasy = async () => {
     if (!user?.id || !profile) return;
-
     try {
       const nextLevel = getNextHigherLevel(profile?.routine_level || "moderate");
-
       const { data, error } = await supabase
         .from("profiles")
-        .update({
-          routine_level: nextLevel,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ routine_level: nextLevel, updated_at: new Date().toISOString() })
         .eq("id", user.id)
         .select()
         .single();
-
       if (error) throw error;
       setProfile(data);
     } catch (err) {
@@ -675,20 +669,14 @@ export default function Routine() {
 
   const handleTooHard = async () => {
     if (!user?.id || !profile) return;
-
     try {
       const nextLevel = getNextLowerLevel(profile?.routine_level || "moderate");
-
       const { data, error } = await supabase
         .from("profiles")
-        .update({
-          routine_level: nextLevel,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ routine_level: nextLevel, updated_at: new Date().toISOString() })
         .eq("id", user.id)
         .select()
         .single();
-
       if (error) throw error;
       setProfile(data);
     } catch (err) {
@@ -719,10 +707,7 @@ export default function Routine() {
       const previousMobility = Number(profile?.mobility_score ?? 50);
       const previousStrength = Number(profile?.strength_score ?? 50);
 
-      const mobilityCount = exercises.filter(
-        (e) => e.category === "mobility"
-      ).length;
-
+      const mobilityCount = exercises.filter((e) => e.category === "mobility").length;
       const strengthCount = exercises.filter(
         (e) => e.category === "strength" || e.category === "stability"
       ).length;
@@ -785,7 +770,6 @@ export default function Routine() {
 
   if (selectedExercise) {
     const selectedIndex = exercises.findIndex((e) => e.id === selectedExercise.id);
-
     return (
       <ExerciseDetailView
         exercise={exercises[selectedIndex] || exercises[0]}
@@ -831,7 +815,7 @@ export default function Routine() {
               SpineLab Daily
             </p>
             <h1 className="text-3xl font-bold tracking-tight leading-tight">
-              Today’s Routine
+              Today's Routine
             </h1>
           </div>
 
@@ -869,12 +853,11 @@ export default function Routine() {
         <div className="rounded-[28px] border border-border bg-card p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold mb-1">Today’s focus</p>
+              <p className="text-sm font-semibold mb-1">Today's focus</p>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 {todayFocus}. Small daily wins compound and improve your Spine Score over time.
               </p>
             </div>
-
             <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
               <Sparkles className="w-5 h-5 text-primary" />
             </div>
@@ -887,14 +870,12 @@ export default function Routine() {
               </p>
               <p className="text-sm font-bold">~{totalMins} min</p>
             </div>
-
             <div className="rounded-2xl bg-secondary/70 px-3 py-3">
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">
                 Moves
               </p>
               <p className="text-sm font-bold">{exercises.length}</p>
             </div>
-
             <div className="rounded-2xl bg-secondary/70 px-3 py-3">
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">
                 Reward
@@ -934,7 +915,6 @@ export default function Routine() {
                   <span className="text-[10px] font-bold text-muted-foreground">
                     {String(i + 1).padStart(2, "0")}
                   </span>
-
                   <span
                     className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
                       CATEGORY_COLORS[ex.category] ||
@@ -943,14 +923,12 @@ export default function Routine() {
                   >
                     {CATEGORY_LABELS[ex.category] || ex.category}
                   </span>
-
                   {i === 0 && (
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-sky-100 text-sky-700 border-sky-200">
                       Start here
                     </span>
                   )}
                 </div>
-
                 <p className="text-[15px] font-semibold leading-snug">{ex.name}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {ex.dosage || ex.instructions?.[0] || "Move slowly and stay controlled."}
@@ -981,11 +959,10 @@ export default function Routine() {
           {routineCompleted ? (
             <div className="bg-primary/10 rounded-3xl p-6 text-center border border-primary/10">
               <Check className="w-8 h-8 text-primary mx-auto mb-2" />
-              <p className="font-semibold text-base">Today’s routine done!</p>
+              <p className="font-semibold text-base">Today's routine done!</p>
               <p className="text-sm text-muted-foreground mt-1">
                 Great work. This routine will stay here until tomorrow.
               </p>
-
               {earnedToday && (
                 <p className="text-sm font-semibold text-primary mt-3">
                   You earned {earnedToday.points} points.
@@ -999,7 +976,7 @@ export default function Routine() {
               disabled={exercises.length === 0}
             >
               <Play className="w-5 h-5" />
-              Start Today’s Routine
+              Start Today's Routine
             </Button>
           )}
         </motion.div>
