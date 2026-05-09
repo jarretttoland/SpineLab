@@ -62,13 +62,13 @@ function calcShields(streak) {
 }
 
 // ── Spine Age copy ─────────────────────────────────────────────────────────
-function getSpineAgeCopy(spineAge, realAge) {
-  const diff = realAge - spineAge;
-  if (diff >= 10) return "Your spine is performing exceptionally well.";
-  if (diff >= 5)  return "You're well ahead of your age. Keep it up.";
-  if (diff >= 1)  return "You're trending younger. Stay consistent.";
-  if (diff === 0) return "Your spine matches your age. Room to improve.";
-  return "Your spine needs attention. Daily work will turn this around.";
+function getSpineAgeCopy(spineAge) {
+  if (spineAge <= 25) return "Excellent spine health. Keep building on this.";
+  if (spineAge <= 30) return "Your spine is in great shape. Stay consistent.";
+  if (spineAge <= 35) return "Solid foundation. Daily work will keep improving this.";
+  if (spineAge <= 40) return "Room to improve. Consistency is key.";
+  if (spineAge <= 50) return "Your spine needs regular attention. Stay with it.";
+  return "Daily work will turn this around. You're in the right place.";
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -134,14 +134,12 @@ export default function Dashboard() {
   const displayName  = safeProfile.first_name?.trim() || "SpineLab";
   const exercises    = getRoutineForUser(safeProfile.pain_areas || []);
 
-  // Derived values — all calculated from existing DB fields, nothing written
+  // Derived values — calculated from existing DB fields, nothing written
   const spineAge    = calcSpineAge(spineScore, safeProfile.age_range);
-  const realAge     = getAgeRangeMidpoint(safeProfile.age_range);
-  const ageDiff     = realAge - spineAge;
   const spineLevel  = getSpineLevel(spineScore);
   const nextThresh  = getNextLevelThreshold(spineScore);
   const shields     = calcShields(streak);
-  const ageCopy     = getSpineAgeCopy(spineAge, realAge);
+  const ageCopy     = getSpineAgeCopy(spineAge);
 
   const primaryGoalLabel =
     safeProfile.primary_goal === "pain_relief"    ? "Pain relief"              :
@@ -150,9 +148,9 @@ export default function Dashboard() {
     "Daily spine health";
 
   // Progress within current level band (0–100)
-  const levelBands   = [0, 40, 55, 70, 85, 100];
-  const bandLow      = levelBands[spineLevel.level - 1];
-  const bandHigh     = levelBands[spineLevel.level];
+  const levelBands    = [0, 40, 55, 70, 85, 100];
+  const bandLow       = levelBands[spineLevel.level - 1];
+  const bandHigh      = levelBands[spineLevel.level];
   const levelProgress = Math.round(((spineScore - bandLow) / (bandHigh - bandLow)) * 100);
 
   return (
@@ -199,15 +197,15 @@ export default function Dashboard() {
               <p className={`text-5xl font-black leading-none ${spineLevel.color}`}>
                 {spineAge}
               </p>
-              {ageDiff !== 0 && (
-                <div className={`mt-2 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                  ageDiff > 0
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
-                    : "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
-                }`}>
-                  {ageDiff > 0 ? `${ageDiff} yrs younger` : `${Math.abs(ageDiff)} yrs older`}
-                </div>
-              )}
+              <div className={`mt-2 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                spineAge <= 30
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                  : spineAge <= 40
+                  ? "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400"
+                  : "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
+              }`}>
+                {spineAge <= 30 ? "Performing great" : spineAge <= 40 ? "Performing well" : "Needs attention"}
+              </div>
               <p className="text-[11px] text-muted-foreground mt-2 leading-snug max-w-[140px]">
                 {ageCopy}
               </p>
