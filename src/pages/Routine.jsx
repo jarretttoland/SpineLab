@@ -348,17 +348,22 @@ function withLevel(exercise, level) {
     "Kneeling Thoracic Spine Extension",
   ];
 
-  const repExercises = [
-    "Glute Bridge",
+  // Rep exercises that alternate sides — dosage shows "per side"
+  const perSideRepExercises = [
+    "Seated Upright Twists",
     "Bird Dog",
     "Dead Bug",
+    "Shoulder Lateral Rotation",
+  ];
+
+  // Rep exercises that are not per-side
+  const repExercises = [
+    "Glute Bridge",
     "Pelvic Tilt",
     "Chin Tuck",
-    "Shoulder Lateral Rotation",
     "Cat Cow Stretch",
     "Standing Scapular External Rotation",
     "Wall Angels Standing",
-    "Seated Upright Twists",
     "Sitting Thoracic Spine Flexion",
   ];
 
@@ -384,6 +389,12 @@ function withLevel(exercise, level) {
   if (holdExercises.includes(base.name)) {
     base.durationSecs = c.hold;
     base.dosage = `${c.sets} x ${c.hold}s hold`;
+    return base;
+  }
+
+  if (perSideRepExercises.includes(base.name)) {
+    base.durationSecs = c.reps * 3;
+    base.dosage = `${c.sets} x ${c.reps} reps per side`;
     return base;
   }
 
@@ -416,12 +427,13 @@ function normalizeExercise(ex, index = 0) {
 }
 
 function getChairOnlyPlan() {
+  // Bent Arm Chest Stretch removed — requires standing against a wall
   return [
     "360 Breathing",
     "Sitting Neck Flexion Stretch",
     "Seated Upright Twists",
-    "Bent Arm Chest Stretch",
     "Sitting Thoracic Spine Flexion",
+    "Chin Tuck",
   ];
 }
 

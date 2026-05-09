@@ -32,7 +32,6 @@ const BREATH_EXHALE = 5;
 const BREATH_CYCLE = BREATH_INHALE + BREATH_EXHALE;
 const TOTAL_BREATHS = 6;
 
-// Hold exercises with a countdown timer (Chin Tuck removed — it's reps now)
 const HOLD_EXERCISES = [
   "Side Plank",
   "Forward Head Posture Hold",
@@ -45,7 +44,6 @@ const HOLD_EXERCISES = [
   "Kneeling Thoracic Spine Extension",
 ];
 
-// These exercises split durationSecs into two sides
 const PER_SIDE_EXERCISES = [
   "Side Plank",
   "Hip Flexor Stretch",
@@ -53,7 +51,6 @@ const PER_SIDE_EXERCISES = [
   "Single Leg Glute Bridge",
 ];
 
-// Parse sets and per-set seconds from dosage string e.g. "2 x 30s hold" or "2 x 20s each side"
 function parseDosage(exercise) {
   const dosage = exercise.dosage || "";
   const match = dosage.match(/(\d+)\s*x\s*(\d+)s/);
@@ -63,7 +60,6 @@ function parseDosage(exercise) {
       secsPerSet: parseInt(match[2], 10),
     };
   }
-  // fallback: 1 set using durationSecs
   return {
     sets: 1,
     secsPerSet: exercise.durationSecs || 30,
@@ -184,18 +180,15 @@ function HoldTimer({ exercise }) {
   const category = exercise.category || "mobility";
   const style = HOLD_CATEGORY_STYLES[category] || HOLD_CATEGORY_STYLES.mobility;
 
-  // For per-side: each "set" = one side, so total stages = sets * 2 sides
-  // For regular: total stages = sets
   const totalStages = isPerSide ? sets * 2 : sets;
 
-  const [stage, setStage] = useState(0); // 0-indexed current stage
+  const [stage, setStage] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(secsPerSet);
   const [running, setRunning] = useState(false);
-  const [stageDone, setStageDone] = useState(false); // current stage finished
+  const [stageDone, setStageDone] = useState(false);
   const [allDone, setAllDone] = useState(false);
   const intervalRef = useRef(null);
 
-  // Reset timer when stage changes
   useEffect(() => {
     setSecondsLeft(secsPerSet);
     setRunning(false);
@@ -234,15 +227,14 @@ function HoldTimer({ exercise }) {
   const circumference = 2 * Math.PI * R;
   const progress = 1 - secondsLeft / secsPerSet;
 
-  // Label for current stage
   function getStageLabel() {
     if (allDone) return "All sets complete!";
     if (stageDone) {
       if (isPerSide) {
-        const side = stage % 2 === 0 ? "left" : "right";
-        const nextSide = side === "left" ? "right" : "left";
-        if (stage + 1 < totalStages) return `${side === "left" ? "Left" : "Right"} side done — switch to ${nextSide}`;
-        return "Hold complete!";
+        const side = stage % 2 === 0 ? "Left" : "Right";
+        const nextSide = side === "Left" ? "right" : "left";
+        if (stage + 1 < totalStages) return `${side} side done — switch to ${nextSide}`;
+        return "Both sides complete!";
       }
       const setNum = stage + 1;
       if (setNum < sets) return `Set ${setNum} done — rest, then start set ${setNum + 1}`;
@@ -253,10 +245,13 @@ function HoldTimer({ exercise }) {
       return running ? `${side} side — hold steady` : `${side} side — press play`;
     }
     const setNum = stage + 1;
-    return running ? `Set ${setNum} of ${sets} — hold steady` : `Set ${setNum} of ${sets} — press play`;
+    return running
+      ? `Set ${setNum} of ${sets} — hold steady`
+      : sets === 1
+      ? "Press play to start"
+      : `Set ${setNum} of ${sets} — press play`;
   }
 
-  // Dot indicators
   function renderDots() {
     return (
       <div className="flex items-center gap-1 mb-2">
@@ -284,7 +279,7 @@ function HoldTimer({ exercise }) {
             <circle cx="50" cy="50" r={R} fill="none" stroke="hsl(var(--secondary))" strokeWidth="7" />
             <motion.circle
               cx="50" cy="50" r={R} fill="none"
-              stroke={allDone ? style.ring : style.ring}
+              stroke={style.ring}
               strokeWidth="7" strokeLinecap="round"
               strokeDasharray={circumference}
               animate={{ strokeDashoffset: circumference * (1 - (allDone ? 1 : progress)) }}
@@ -332,7 +327,6 @@ function HoldTimer({ exercise }) {
             </div>
           )}
 
-          {/* Show play/pause while timer is running or not yet started */}
           {!stageDone && !allDone && (
             <button
               onClick={() => setRunning((r) => !r)}
@@ -344,14 +338,13 @@ function HoldTimer({ exercise }) {
             </button>
           )}
 
-          {/* Show next-set / switch-side button after each stage completes */}
           {stageDone && !allDone && (
             <button
               onClick={handleNextStage}
               className="px-4 h-11 rounded-full flex items-center gap-2 bg-primary text-primary-foreground text-sm font-semibold shadow transition-all active:scale-95"
             >
               {isPerSide
-                ? stage % 2 === 0 ? "Switch sides" : sets > 1 && stage + 1 < totalStages ? "Next set" : "Done"
+                ? stage % 2 === 0 ? "Switch sides" : stage + 1 < totalStages ? "Next set" : "Done"
                 : "Start next set"}
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -434,9 +427,13 @@ export default function ExerciseTimer({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -30 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className="fixed inset-0 bg-background overflow-y-auto"
+      className="fixed inset-0 bg-background"
+      style={{ overflowY: "auto", WebkitOverflowScrolling: "touch" }}
     >
-      <div className="max-w-lg mx-auto flex flex-col px-4 pt-4 pb-8">
+      <div
+        className="max-w-lg mx-auto flex flex-col px-4 pt-4 pb-16"
+        style={{ minHeight: "100%" }}
+      >
         <div className="h-1 bg-secondary rounded-full overflow-hidden mb-3">
           <motion.div
             className="h-full bg-primary"
