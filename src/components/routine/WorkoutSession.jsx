@@ -5,13 +5,6 @@ import { X, Loader2 } from "lucide-react";
 import ExerciseTimer from "./ExerciseTimer";
 import CompletionCelebration from "./CompletionCelebration";
 
-function getSessionReward(streak = 0) {
-  const nextStreak = (streak || 0) + 1;
-  if (nextStreak % 7 === 0) return { points: 30, label: "7-day streak bonus" };
-  if (nextStreak % 3 === 0) return { points: 20, label: "3-day streak bonus" };
-  return { points: 10, label: "Daily completion" };
-}
-
 export default function WorkoutSession({
   exercises = [],
   dayOfPlan,
@@ -22,38 +15,32 @@ export default function WorkoutSession({
   onReturnDashboard,
   onExit,
 }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [completedCount, setCompletedCount] = useState(0);
+  const [currentIndex, setCurrentIndex]       = useState(0);
+  const [completedCount, setCompletedCount]   = useState(0);
   const [savingCompletion, setSavingCompletion] = useState(false);
   const [completionResult, setCompletionResult] = useState(null);
 
-  const reward = useMemo(() => getSessionReward(streak), [streak]);
   const current = exercises?.[currentIndex];
 
   const handleExerciseComplete = async () => {
-    const next = currentIndex + 1;
+    const next              = currentIndex + 1;
     const nextCompletedCount = completedCount + 1;
-
     setCompletedCount(nextCompletedCount);
 
     if (next >= exercises.length) {
       setSavingCompletion(true);
-
       try {
         const result = await onComplete?.();
-
         if (!result?.scoreSnapshot || !result?.newScores) {
           console.error("[WorkoutSession] Missing completion result:", result);
           return;
         }
-
         setCompletionResult(result);
       } catch (err) {
         console.error("[WorkoutSession] completion error:", err);
       } finally {
         setSavingCompletion(false);
       }
-
       return;
     }
 
@@ -70,9 +57,7 @@ export default function WorkoutSession({
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
           <p className="font-semibold text-lg">Saving your progress...</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Building today’s score update.
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">Building today's score update.</p>
         </div>
       </div>
     );
@@ -83,7 +68,6 @@ export default function WorkoutSession({
       <CompletionCelebration
         dayOfPlan={dayOfPlan}
         streak={streak}
-        reward={reward}
         scoreSnapshot={completionResult.scoreSnapshot}
         newScores={completionResult.newScores}
         exerciseCount={exercises.length}
@@ -99,9 +83,7 @@ export default function WorkoutSession({
     return (
       <div className="fixed inset-0 bg-background flex items-center justify-center px-6">
         <div className="text-center">
-          <p className="font-semibold text-lg mb-4">
-            Workout unavailable. Please refresh.
-          </p>
+          <p className="font-semibold text-lg mb-4">Workout unavailable. Please refresh.</p>
           <Button onClick={onExit}>Go Back</Button>
         </div>
       </div>

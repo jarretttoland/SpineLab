@@ -5,11 +5,11 @@ import { Flame, Shield, Zap, TrendingUp } from "lucide-react";
 import confetti from "canvas-confetti";
 
 function getSpineLevel(score) {
-  if (score >= 85) return { level: 5, title: "Elite", color: "text-amber-500", bg: "bg-amber-50 border-amber-200 dark:bg-amber-950/30", ring: "#f59e0b" };
-  if (score >= 70) return { level: 4, title: "Resilient", color: "text-violet-500", bg: "bg-violet-50 border-violet-200 dark:bg-violet-950/30", ring: "#8b5cf6" };
-  if (score >= 55) return { level: 3, title: "Strong", color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30", ring: "#10b981" };
-  if (score >= 40) return { level: 2, title: "Stabilizing", color: "text-sky-500", bg: "bg-sky-50 border-sky-200 dark:bg-sky-950/30", ring: "#0ea5e9" };
-  return { level: 1, title: "Rebuilding", color: "text-rose-500", bg: "bg-rose-50 border-rose-200 dark:bg-rose-950/30", ring: "#f43f5e" };
+  if (score >= 85) return { level: 5, title: "Elite",       color: "text-amber-500",   bg: "bg-amber-50 border-amber-200 dark:bg-amber-950/30",   ring: "#f59e0b" };
+  if (score >= 70) return { level: 4, title: "Resilient",   color: "text-violet-500",  bg: "bg-violet-50 border-violet-200 dark:bg-violet-950/30", ring: "#8b5cf6" };
+  if (score >= 55) return { level: 3, title: "Strong",      color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30", ring: "#10b981" };
+  if (score >= 40) return { level: 2, title: "Stabilizing", color: "text-sky-500",     bg: "bg-sky-50 border-sky-200 dark:bg-sky-950/30",         ring: "#0ea5e9" };
+  return                   { level: 1, title: "Rebuilding",  color: "text-rose-500",    bg: "bg-rose-50 border-rose-200 dark:bg-rose-950/30",       ring: "#f43f5e" };
 }
 
 function getNextLevelThreshold(score) {
@@ -24,57 +24,41 @@ function didLevelUp(oldScore, newScore) {
   return [40, 55, 70, 85].some((t) => oldScore < t && newScore >= t);
 }
 
-function explainDelta(label, delta, exercises) {
+function explainDelta(label, delta, count) {
   if (delta <= 0) return null;
   if (label === "Consistency") return "Showing up daily compounds over time.";
-  if (label === "Mobility") return `${exercises} mobility exercises improved your range.`;
-  if (label === "Strength") return `${exercises} strength moves built spinal support.`;
+  if (label === "Mobility")    return `${count} mobility exercises improved your range.`;
+  if (label === "Strength")    return `${count} strength moves built spinal support.`;
   return null;
 }
 
+// ── Animated counter ───────────────────────────────────────────────────────
 function CountUp({ from, to, duration = 1000, color, className = "" }) {
   const [display, setDisplay] = useState(from);
   const startTime = useRef(null);
-  const rafRef = useRef(null);
+  const rafRef    = useRef(null);
 
   useEffect(() => {
-    if (from === to) {
-      setDisplay(to);
-      return;
-    }
-
+    if (from === to) { setDisplay(to); return; }
     startTime.current = null;
-
     const animate = (ts) => {
       if (!startTime.current) startTime.current = ts;
-      const elapsed = ts - startTime.current;
+      const elapsed  = ts - startTime.current;
       const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-
+      const eased    = 1 - Math.pow(1 - progress, 3);
       setDisplay(Math.round(from + (to - from) * eased));
-
-      if (progress < 1) {
-        rafRef.current = requestAnimationFrame(animate);
-      }
+      if (progress < 1) rafRef.current = requestAnimationFrame(animate);
     };
-
     rafRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [from, to, duration]);
 
-  return (
-    <span className={className} style={{ color }}>
-      {display}
-    </span>
-  );
+  return <span className={className} style={{ color }}>{display}</span>;
 }
 
+// ── Delta badge ────────────────────────────────────────────────────────────
 function Delta({ value }) {
   if (!value || value === 0) return null;
-
   return (
     <motion.span
       initial={{ opacity: 0, scale: 0.8 }}
@@ -91,14 +75,14 @@ function Delta({ value }) {
   );
 }
 
+// ── Particle burst ─────────────────────────────────────────────────────────
 function ParticleBurst({ color }) {
   return (
     <div className="absolute inset-0 pointer-events-none">
       {Array.from({ length: 12 }).map((_, i) => {
-        const angle = (i / 12) * 360;
+        const angle    = (i / 12) * 360;
         const distance = 55 + Math.random() * 35;
-        const rad = (angle * Math.PI) / 180;
-
+        const rad      = (angle * Math.PI) / 180;
         return (
           <motion.div
             key={i}
@@ -111,11 +95,7 @@ function ParticleBurst({ color }) {
               opacity: 0,
               scale: 0,
             }}
-            transition={{
-              duration: 0.65,
-              delay: i * 0.025,
-              ease: "easeOut",
-            }}
+            transition={{ duration: 0.65, delay: i * 0.025, ease: "easeOut" }}
           />
         );
       })}
@@ -123,6 +103,7 @@ function ParticleBurst({ color }) {
   );
 }
 
+// ── Main ───────────────────────────────────────────────────────────────────
 export default function CompletionCelebration({
   dayOfPlan,
   streak,
@@ -134,35 +115,36 @@ export default function CompletionCelebration({
   onFinish,
   onBack,
 }) {
-  const oldScore = scoreSnapshot?.spineScore ?? 0;
-  const newScore = newScores?.spineScore ?? oldScore;
+  const oldScore  = scoreSnapshot?.spineScore  ?? 0;
+  const newScore  = newScores?.spineScore      ?? oldScore;
   const scoreDiff = newScore - oldScore;
 
-  const oldLevel = getSpineLevel(oldScore);
-  const newLevel = getSpineLevel(newScore);
-  const leveledUp = didLevelUp(oldScore, newScore);
+  const oldLevel   = getSpineLevel(oldScore);
+  const newLevel   = getSpineLevel(newScore);
+  const leveledUp  = didLevelUp(oldScore, newScore);
   const nextThresh = getNextLevelThreshold(newScore);
 
-  const newStreak = newScores?.currentStreak ?? (streak ?? 0) + 1;
+  // Use streak passed in + 1 since Routine already incremented it in DB
+  // but passes the pre-increment value as the prop
+  const newStreak    = (streak ?? 0) + 1;
   const shieldEarned = newStreak % 7 === 0;
 
-  const [phase, setPhase] = useState("icon");
+  const [phase, setPhase]               = useState("icon");
   const [showParticles, setShowParticles] = useState(true);
 
+  // Sequence the reveals
   useEffect(() => {
     setShowParticles(true);
-
-    const t1 = setTimeout(() => setShowParticles(false), 800);
-    const t2 = setTimeout(() => setPhase("score"), leveledUp ? 600 : 400);
-    const t3 = setTimeout(() => setPhase("breakdown"), leveledUp ? 1400 : 1100);
-    const t4 = setTimeout(() => setPhase("stats"), leveledUp ? 2000 : 1700);
-
+    const t1 = setTimeout(() => setShowParticles(false),  800);
+    const t2 = setTimeout(() => setPhase("score"),        leveledUp ? 600  : 400);
+    const t3 = setTimeout(() => setPhase("breakdown"),    leveledUp ? 1400 : 1100);
+    const t4 = setTimeout(() => setPhase("stats"),        leveledUp ? 2000 : 1700);
     return () => [t1, t2, t3, t4].forEach(clearTimeout);
   }, [leveledUp]);
 
+  // Confetti on level up
   useEffect(() => {
     if (!leveledUp) return;
-
     const t = setTimeout(() => {
       confetti({
         particleCount: 140,
@@ -170,7 +152,6 @@ export default function CompletionCelebration({
         origin: { y: 0.5 },
         colors: [newLevel.ring, "#ffffff", "#e0e7ff"],
       });
-
       setTimeout(() => {
         confetti({
           particleCount: 70,
@@ -180,62 +161,41 @@ export default function CompletionCelebration({
         });
       }, 350);
     }, 300);
-
     return () => clearTimeout(t);
   }, [leveledUp, newLevel.ring]);
 
   const subScores = [
     {
-      label: "Mobility",
-      oldVal: scoreSnapshot?.mobilityScore ?? 0,
-      newVal: newScores?.mobilityScore ?? 0,
-      color: "#10b981",
-      explain: explainDelta(
-        "Mobility",
-        (newScores?.mobilityScore ?? 0) - (scoreSnapshot?.mobilityScore ?? 0),
-        mobilityCount
-      ),
+      label:   "Mobility",
+      oldVal:  scoreSnapshot?.mobilityScore    ?? 0,
+      newVal:  newScores?.mobilityScore        ?? 0,
+      color:   "#10b981",
+      explain: explainDelta("Mobility",    (newScores?.mobilityScore    ?? 0) - (scoreSnapshot?.mobilityScore    ?? 0), mobilityCount),
     },
     {
-      label: "Strength",
-      oldVal: scoreSnapshot?.strengthScore ?? 0,
-      newVal: newScores?.strengthScore ?? 0,
-      color: "#f43f5e",
-      explain: explainDelta(
-        "Strength",
-        (newScores?.strengthScore ?? 0) - (scoreSnapshot?.strengthScore ?? 0),
-        strengthCount
-      ),
+      label:   "Strength",
+      oldVal:  scoreSnapshot?.strengthScore    ?? 0,
+      newVal:  newScores?.strengthScore        ?? 0,
+      color:   "#f43f5e",
+      explain: explainDelta("Strength",    (newScores?.strengthScore    ?? 0) - (scoreSnapshot?.strengthScore    ?? 0), strengthCount),
     },
     {
-      label: "Consistency",
-      oldVal: scoreSnapshot?.consistencyScore ?? 0,
-      newVal: newScores?.consistencyScore ?? 0,
-      color: "#0ea5e9",
-      explain: explainDelta(
-        "Consistency",
-        (newScores?.consistencyScore ?? 0) - (scoreSnapshot?.consistencyScore ?? 0),
-        0
-      ),
+      label:   "Consistency",
+      oldVal:  scoreSnapshot?.consistencyScore ?? 0,
+      newVal:  newScores?.consistencyScore     ?? 0,
+      color:   "#0ea5e9",
+      explain: explainDelta("Consistency", (newScores?.consistencyScore ?? 0) - (scoreSnapshot?.consistencyScore ?? 0), 0),
     },
   ];
 
-  const levelBands = [0, 40, 55, 70, 85, 100];
-
-  const oldBandLow = levelBands[oldLevel.level - 1];
+  // Level progress bands
+  const levelBands  = [0, 40, 55, 70, 85, 100];
+  const oldBandLow  = levelBands[oldLevel.level - 1];
   const oldBandHigh = levelBands[oldLevel.level];
-  const newBandLow = levelBands[newLevel.level - 1];
+  const newBandLow  = levelBands[newLevel.level - 1];
   const newBandHigh = levelBands[newLevel.level];
-
-  const oldBarPct = Math.min(
-    100,
-    Math.max(0, Math.round(((oldScore - oldBandLow) / (oldBandHigh - oldBandLow)) * 100))
-  );
-
-  const newBarPct = Math.min(
-    100,
-    Math.max(0, Math.round(((newScore - newBandLow) / (newBandHigh - newBandLow)) * 100))
-  );
+  const oldBarPct   = Math.min(100, Math.max(0, Math.round(((oldScore - oldBandLow) / (oldBandHigh - oldBandLow)) * 100)));
+  const newBarPct   = Math.min(100, Math.max(0, Math.round(((newScore - newBandLow) / (newBandHigh - newBandLow)) * 100)));
 
   return (
     <motion.div
@@ -244,6 +204,8 @@ export default function CompletionCelebration({
       className="fixed inset-0 bg-background overflow-y-auto"
     >
       <div className="max-w-md mx-auto px-5 pt-12 pb-20 flex flex-col items-center">
+
+        {/* ── Icon ── */}
         <div className="relative mb-5">
           {showParticles && <ParticleBurst color={newLevel.ring} />}
 
@@ -256,10 +218,7 @@ export default function CompletionCelebration({
               style={{ borderColor: newLevel.ring }}
             >
               <Zap className="w-9 h-9 mb-0.5" style={{ color: newLevel.ring }} />
-              <span
-                className="text-xs font-black tracking-wide"
-                style={{ color: newLevel.ring }}
-              >
+              <span className="text-xs font-black tracking-wide" style={{ color: newLevel.ring }}>
                 {newLevel.title}
               </span>
             </motion.div>
@@ -276,6 +235,7 @@ export default function CompletionCelebration({
           )}
         </div>
 
+        {/* ── Headline ── */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -284,9 +244,7 @@ export default function CompletionCelebration({
         >
           {leveledUp ? (
             <>
-              <p
-                className={`text-xs font-bold uppercase tracking-widest mb-1 ${newLevel.color}`}
-              >
+              <p className={`text-xs font-bold uppercase tracking-widest mb-1 ${newLevel.color}`}>
                 Level Up
               </p>
               <h1 className="text-3xl font-black tracking-tight leading-tight">
@@ -310,6 +268,7 @@ export default function CompletionCelebration({
           {exerciseCount} exercises · Day {dayOfPlan} of your plan
         </motion.p>
 
+        {/* ── Spine Score card ── */}
         <AnimatePresence>
           {phase !== "icon" && (
             <motion.div
@@ -322,12 +281,9 @@ export default function CompletionCelebration({
                 <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   Spine Score
                 </p>
-
                 <div className="flex items-center gap-2">
                   {leveledUp && (
-                    <span
-                      className={`text-[11px] font-black px-2 py-0.5 rounded-full border ${newLevel.bg} ${newLevel.color}`}
-                    >
+                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-full border ${newLevel.bg} ${newLevel.color}`}>
                       <Zap className="w-2.5 h-2.5 inline mr-0.5" />
                       {newLevel.title}
                     </span>
@@ -338,33 +294,24 @@ export default function CompletionCelebration({
 
               <div className="flex items-end gap-2 mb-4">
                 <p className="text-6xl font-black leading-none">
-                  <CountUp
-                    from={oldScore}
-                    to={newScore}
-                    duration={900}
-                    color={newLevel.ring}
-                  />
+                  <CountUp from={oldScore} to={newScore} duration={900} color={newLevel.ring} />
                 </p>
-
                 <div className="mb-1.5">
                   <p className="text-sm text-muted-foreground leading-none">/ 100</p>
                   {scoreDiff > 0 && (
-                    <p
-                      className="text-[11px] font-semibold mt-0.5"
-                      style={{ color: newLevel.ring }}
-                    >
+                    <p className="text-[11px] font-semibold mt-0.5" style={{ color: newLevel.ring }}>
                       +{scoreDiff} this session
                     </p>
                   )}
                 </div>
               </div>
 
+              {/* Level progress bar */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                     Level {newLevel.level} · {newLevel.title}
                   </p>
-
                   {nextThresh ? (
                     <p className="text-[11px] text-muted-foreground">
                       {nextThresh - newScore} pts to{" "}
@@ -376,18 +323,13 @@ export default function CompletionCelebration({
                     <p className="text-[11px] text-amber-500 font-bold">Max level</p>
                   )}
                 </div>
-
                 <div className="h-2.5 bg-secondary rounded-full overflow-hidden">
                   <motion.div
                     className="h-full rounded-full"
                     style={{ backgroundColor: newLevel.ring }}
                     initial={{ width: `${oldBarPct}%` }}
                     animate={{ width: `${newBarPct}%` }}
-                    transition={{
-                      duration: 1.1,
-                      ease: "easeOut",
-                      delay: 0.3,
-                    }}
+                    transition={{ duration: 1.1, ease: "easeOut", delay: 0.3 }}
                   />
                 </div>
               </div>
@@ -395,6 +337,7 @@ export default function CompletionCelebration({
           )}
         </AnimatePresence>
 
+        {/* ── What moved today ── */}
         <AnimatePresence>
           {(phase === "breakdown" || phase === "stats") && (
             <motion.div
@@ -406,13 +349,11 @@ export default function CompletionCelebration({
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">
                 What moved today
               </p>
-
               <div className="space-y-4">
                 {subScores.map(({ label, oldVal, newVal, color, explain }, i) => {
-                  const delta = newVal - oldVal;
-                  const pct = Math.min(100, Math.max(0, newVal));
+                  const delta  = newVal - oldVal;
+                  const pct    = Math.min(100, Math.max(0, newVal));
                   const oldPct = Math.min(100, Math.max(0, oldVal));
-
                   return (
                     <motion.div
                       key={label}
@@ -422,37 +363,22 @@ export default function CompletionCelebration({
                     >
                       <div className="flex items-center justify-between mb-1">
                         <p className="text-sm font-semibold">{label}</p>
-
                         <div className="flex items-center gap-1.5">
-                          <CountUp
-                            from={oldVal}
-                            to={newVal}
-                            duration={700}
-                            color={color}
-                            className="text-sm font-black"
-                          />
+                          <CountUp from={oldVal} to={newVal} duration={700} color={color} className="text-sm font-black" />
                           <Delta value={delta} />
                         </div>
                       </div>
-
                       <div className="h-2 bg-secondary rounded-full overflow-hidden mb-1">
                         <motion.div
                           className="h-full rounded-full"
                           style={{ backgroundColor: color }}
                           initial={{ width: `${oldPct}%` }}
                           animate={{ width: `${pct}%` }}
-                          transition={{
-                            duration: 0.8,
-                            ease: "easeOut",
-                            delay: i * 0.1,
-                          }}
+                          transition={{ duration: 0.8, ease: "easeOut", delay: i * 0.1 }}
                         />
                       </div>
-
                       {explain && delta > 0 && (
-                        <p className="text-[11px] text-muted-foreground">
-                          {explain}
-                        </p>
+                        <p className="text-[11px] text-muted-foreground">{explain}</p>
                       )}
                     </motion.div>
                   );
@@ -462,6 +388,7 @@ export default function CompletionCelebration({
           )}
         </AnimatePresence>
 
+        {/* ── Streak + Shield + Next level ── */}
         <AnimatePresence>
           {phase === "stats" && (
             <motion.div
@@ -470,12 +397,12 @@ export default function CompletionCelebration({
               transition={{ duration: 0.4 }}
               className="w-full space-y-3 mb-8"
             >
+              {/* Streak */}
               <div className="rounded-2xl border border-border bg-card px-5 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                     <Flame className="w-5 h-5 text-primary" />
                   </div>
-
                   <div>
                     <p className="text-sm font-bold">{newStreak} day streak</p>
                     <p className="text-xs text-muted-foreground">
@@ -485,10 +412,10 @@ export default function CompletionCelebration({
                     </p>
                   </div>
                 </div>
-
                 <p className="text-2xl font-black text-primary">{newStreak}</p>
               </div>
 
+              {/* Shield earned */}
               {shieldEarned && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.92 }}
@@ -499,7 +426,6 @@ export default function CompletionCelebration({
                   <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
                     <Shield className="w-5 h-5 text-violet-500" />
                   </div>
-
                   <div>
                     <p className="text-sm font-bold text-violet-700 dark:text-violet-400">
                       Streak Shield earned
@@ -511,6 +437,7 @@ export default function CompletionCelebration({
                 </motion.div>
               )}
 
+              {/* Next level teaser */}
               {nextThresh && !leveledUp && (
                 <div
                   className="rounded-2xl border px-5 py-4 flex items-center justify-between"
@@ -520,22 +447,13 @@ export default function CompletionCelebration({
                   }}
                 >
                   <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">
-                      Next level
-                    </p>
-                    <p
-                      className="text-sm font-bold"
-                      style={{ color: getSpineLevel(nextThresh).ring }}
-                    >
+                    <p className="text-xs text-muted-foreground mb-0.5">Next level</p>
+                    <p className="text-sm font-bold" style={{ color: getSpineLevel(nextThresh).ring }}>
                       {getSpineLevel(nextThresh).title}
                     </p>
                   </div>
-
                   <div className="text-right">
-                    <p
-                      className="text-2xl font-black"
-                      style={{ color: getSpineLevel(nextThresh).ring }}
-                    >
+                    <p className="text-2xl font-black" style={{ color: getSpineLevel(nextThresh).ring }}>
                       {nextThresh - newScore}
                     </p>
                     <p className="text-xs text-muted-foreground">pts away</p>
@@ -546,6 +464,7 @@ export default function CompletionCelebration({
           )}
         </AnimatePresence>
 
+        {/* ── CTAs ── */}
         <AnimatePresence>
           {phase === "stats" && (
             <motion.div
@@ -571,6 +490,7 @@ export default function CompletionCelebration({
             </motion.div>
           )}
         </AnimatePresence>
+
       </div>
     </motion.div>
   );
