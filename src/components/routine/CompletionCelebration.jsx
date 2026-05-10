@@ -143,7 +143,7 @@ export default function CompletionCelebration({
   const leveledUp = didLevelUp(oldScore, newScore);
   const nextThresh = getNextLevelThreshold(newScore);
 
-  const newStreak = (streak ?? 0) + 1;
+  const newStreak = newScores?.currentStreak ?? (streak ?? 0) + 1;
   const shieldEarned = newStreak % 7 === 0;
 
   const [phase, setPhase] = useState("icon");
