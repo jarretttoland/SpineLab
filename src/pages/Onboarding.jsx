@@ -956,8 +956,8 @@ export default function Onboarding() {
 
       onboarding_complete: complete,
 
-      current_streak: profile?.current_streak ?? 0,
-      longest_streak: profile?.longest_streak ?? 0,
+      current_streak: isEditMode ? (profile?.current_streak ?? 0) : 0,
+      longest_streak: isEditMode ? (profile?.longest_streak ?? 0) : 0,
 
       scan_results: profile?.scan_results ?? [],
       scan_image_url: profile?.scan_image_url ?? "",
@@ -1060,29 +1060,38 @@ export default function Onboarding() {
   };
 
   const handleSaveAndGoHome = async () => {
-    if (!user?.id || !results || saving) return;
+  if (!user?.id || !results || saving) return;
 
-    setSaving(true);
+  setSaving(true);
 
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          onboarding_complete: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
+  try {
+    const answers = buildAnswers();
 
-      if (error) throw error;
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        onboarding_complete: true,
+        age_range:           followUpAnswers.ageRange,
+        movement_response:   followUpAnswers.movementResponse,
+        activity_level:      followUpAnswers.activityLevel,
+        spine_surgery:       followUpAnswers.spineSurgery === "yes",
+        primary_pain:        answers.primaryPain,
+        primary_goal:        answers.primaryGoal,
+        pain_areas:          painAreas,
+        updated_at:          new Date().toISOString(),
+      })
+      .eq("id", user.id);
 
-      navigate("/dashboard", { replace: true });
-    } catch (err) {
-      console.error("[Onboarding] final save error:", err);
-      alert("We couldn't save your plan yet. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
+    if (error) throw error;
+
+    navigate("/dashboard", { replace: true });
+  } catch (err) {
+    console.error("[Onboarding] final save error:", err);
+    alert("We couldn't save your plan yet. Please try again.");
+  } finally {
+    setSaving(false);
+  }
+};
 
   if (loadingProfile) {
     return (
