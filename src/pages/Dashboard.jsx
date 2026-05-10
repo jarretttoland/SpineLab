@@ -7,39 +7,29 @@ import { getRoutineForUser } from "@/lib/exercises";
 import { supabase } from "@/lib/supabase";
 
 // ── Spine Age ──────────────────────────────────────────────────────────────
-const AGE_RANGE_MIDPOINTS = {
-  // Actual values stored in Supabase
-  "under25":  20,
-  "25to40":   32,
-  "40to55":   47,
-  "55plus":   62,
-  // Fallback variants just in case
-  "under_25":       20,
-  "25_and_younger": 20,
-  "25andyounger":   20,
-  "25-40":          32,
-  "25_40":          32,
-  "40-55":          47,
-  "40_55":          47,
-  "55+":            62,
-  "55_plus":        62,
-};
-
 function getAgeRangeMidpoint(ageRange) {
   if (!ageRange) return 35;
-  // Normalize: lowercase, strip spaces
   const key = ageRange.toLowerCase().replace(/\s+/g, "").trim();
-  if (AGE_RANGE_MIDPOINTS[key]) return AGE_RANGE_MIDPOINTS[key];
-  // Fallback: parse any "XtoY" pattern
+
+  // "25to40", "40to55" etc
   const matchTo = key.match(/(\d+)to(\d+)/);
   if (matchTo) return Math.round((parseInt(matchTo[1]) + parseInt(matchTo[2])) / 2);
-  // Fallback: parse any "X-Y" pattern
+
+  // "25-40", "40-55" etc
   const matchDash = key.match(/(\d+)-(\d+)/);
   if (matchDash) return Math.round((parseInt(matchDash[1]) + parseInt(matchDash[2])) / 2);
+
+  // "55plus", "55+"
+  const matchPlus = key.match(/(\d+)(?:plus|\+)/);
+  if (matchPlus) return parseInt(matchPlus[1]) + 7;
+
+  // "under25"
+  const matchUnder = key.match(/under(\d+)/);
+  if (matchUnder) return parseInt(matchUnder[1]) - 5;
+
   return 35;
 }
-console.log("age_range raw:", JSON.stringify(safeProfile.age_range));
-console.log("spine age result:", calcSpineAge(spineScore, safeProfile.age_range));
+
 function calcSpineAge(spineScore, ageRange) {
   const midAge = getAgeRangeMidpoint(ageRange);
   const raw = midAge - Math.floor((spineScore - 50) / 5);
@@ -51,8 +41,8 @@ function getSpineLevel(spineScore) {
   if (spineScore >= 85) return { level: 5, title: "Elite",       color: "text-amber-500",   bg: "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/40",   ring: "#f59e0b" };
   if (spineScore >= 70) return { level: 4, title: "Resilient",   color: "text-violet-500",  bg: "bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800/40", ring: "#8b5cf6" };
   if (spineScore >= 55) return { level: 3, title: "Strong",      color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/40", ring: "#10b981" };
-  if (spineScore >= 40) return { level: 2, title: "Stabilizing", color: "text-sky-500",     bg: "bg-sky-50 border-sky-200 dark:bg-sky-950/30 dark:border-sky-800/40",     ring: "#0ea5e9" };
-  return                       { level: 1, title: "Rebuilding",  color: "text-rose-500",    bg: "bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800/40",   ring: "#f43f5e" };
+  if (spineScore >= 40) return { level: 2, title: "Stabilizing", color: "text-sky-500",     bg: "bg-sky-50 border-sky-200 dark:bg-sky-950/30 dark:border-sky-800/40",             ring: "#0ea5e9" };
+  return                       { level: 1, title: "Rebuilding",  color: "text-rose-500",    bg: "bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800/40",         ring: "#f43f5e" };
 }
 
 function getNextLevelThreshold(spineScore) {
