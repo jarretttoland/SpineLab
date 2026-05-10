@@ -8,24 +8,38 @@ import { supabase } from "@/lib/supabase";
 
 // ── Spine Age ──────────────────────────────────────────────────────────────
 const AGE_RANGE_MIDPOINTS = {
-  "25 and younger": 20, "25andyounger": 20, "25_and_younger": 20,
-  "under25": 20, "under_25": 20,
-  "25-40": 32, "25_40": 32,
-  "40-55": 47, "40_55": 47,
-  "55+": 62,   "55plus": 62, "55_plus": 62,
+  // Actual values stored in Supabase
+  "under25":  20,
+  "25to40":   32,
+  "40to55":   47,
+  "55plus":   62,
+  // Fallback variants just in case
+  "under_25":       20,
+  "25_and_younger": 20,
+  "25andyounger":   20,
+  "25-40":          32,
+  "25_40":          32,
+  "40-55":          47,
+  "40_55":          47,
+  "55+":            62,
+  "55_plus":        62,
 };
 
 function getAgeRangeMidpoint(ageRange) {
   if (!ageRange) return 35;
-  const key = ageRange.toLowerCase().replace(/\s+/g, " ").trim();
-  const keyNoSpace = key.replace(/\s/g, "");
-  if (AGE_RANGE_MIDPOINTS[key])        return AGE_RANGE_MIDPOINTS[key];
-  if (AGE_RANGE_MIDPOINTS[keyNoSpace]) return AGE_RANGE_MIDPOINTS[keyNoSpace];
-  const match = keyNoSpace.match(/(\d+)-(\d+)/);
-  if (match) return Math.round((parseInt(match[1]) + parseInt(match[2])) / 2);
+  // Normalize: lowercase, strip spaces
+  const key = ageRange.toLowerCase().replace(/\s+/g, "").trim();
+  if (AGE_RANGE_MIDPOINTS[key]) return AGE_RANGE_MIDPOINTS[key];
+  // Fallback: parse any "XtoY" pattern
+  const matchTo = key.match(/(\d+)to(\d+)/);
+  if (matchTo) return Math.round((parseInt(matchTo[1]) + parseInt(matchTo[2])) / 2);
+  // Fallback: parse any "X-Y" pattern
+  const matchDash = key.match(/(\d+)-(\d+)/);
+  if (matchDash) return Math.round((parseInt(matchDash[1]) + parseInt(matchDash[2])) / 2);
   return 35;
 }
-
+console.log("age_range raw:", JSON.stringify(safeProfile.age_range));
+console.log("spine age result:", calcSpineAge(spineScore, safeProfile.age_range));
 function calcSpineAge(spineScore, ageRange) {
   const midAge = getAgeRangeMidpoint(ageRange);
   const raw = midAge - Math.floor((spineScore - 50) / 5);
