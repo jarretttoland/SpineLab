@@ -739,14 +739,15 @@ export default function Routine() {
       exercises={exercises}
       dayOfPlan={dayIndex + 1}
       streak={streak}
-      scoreSnapshot={scoreSnapshot}
-      newScores={completedScores}
       mobilityCount={mobilityCount}
       strengthCount={strengthCount}
       onComplete={handleWorkoutComplete}
+      onReturnDashboard={() => {
+        setSessionActive(false);
+        window.location.assign("/dashboard");
+      }}
       onExit={() => {
         setSessionActive(false);
-        window.location.href = "/dashboard";
       }}
     />
   );

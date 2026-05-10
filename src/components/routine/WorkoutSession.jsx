@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import ExerciseTimer from "./ExerciseTimer";
 import CompletionCelebration from "./CompletionCelebration";
 
@@ -16,42 +16,80 @@ export default function WorkoutSession({
   exercises = [],
   dayOfPlan,
   streak,
-  scoreSnapshot,
-  newScores,
+  mobilityCount,
+  strengthCount,
   onComplete,
+  onReturnDashboard,
   onExit,
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
-  const [showFinish, setShowFinish] = useState(false);
+  const [savingCompletion, setSavingCompletion] = useState(false);
+  const [completionResult, setCompletionResult] = useState(null);
 
   const reward = useMemo(() => getSessionReward(streak), [streak]);
   const current = exercises?.[currentIndex];
 
-  const handleExerciseComplete = () => {
+  const handleExerciseComplete = async () => {
     const next = currentIndex + 1;
-    setCompletedCount((c) => c + 1);
+    const nextCompletedCount = completedCount + 1;
+
+    setCompletedCount(nextCompletedCount);
+
     if (next >= exercises.length) {
-      setShowFinish(true);
-    } else {
-      setCurrentIndex(next);
+      setSavingCompletion(true);
+
+      try {
+        const result = await onComplete?.();
+
+        if (!result?.scoreSnapshot || !result?.newScores) {
+          console.error("[WorkoutSession] Missing completion result:", result);
+          return;
+        }
+
+        setCompletionResult(result);
+      } catch (err) {
+        console.error("[WorkoutSession] completion error:", err);
+      } finally {
+        setSavingCompletion(false);
+      }
+
+      return;
     }
+
+    setCurrentIndex(next);
   };
 
   const handlePrev = () => {
     if (currentIndex > 0) setCurrentIndex((i) => i - 1);
   };
 
-  if (showFinish) {
+  if (savingCompletion) {
+    return (
+      <div className="fixed inset-0 bg-background flex items-center justify-center px-6">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="font-semibold text-lg">Saving your progress...</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Building today’s score update.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (completionResult) {
     return (
       <CompletionCelebration
         dayOfPlan={dayOfPlan}
         streak={streak}
         reward={reward}
-        scoreSnapshot={scoreSnapshot}
-        newScores={newScores}
-        exerciseCount={completedCount}
-        onFinish={onComplete}
+        scoreSnapshot={completionResult.scoreSnapshot}
+        newScores={completionResult.newScores}
+        exerciseCount={exercises.length}
+        mobilityCount={mobilityCount}
+        strengthCount={strengthCount}
+        onFinish={onReturnDashboard}
         onBack={onExit}
       />
     );
