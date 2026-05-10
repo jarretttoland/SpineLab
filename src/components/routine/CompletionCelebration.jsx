@@ -404,13 +404,23 @@ export default function CompletionCelebration({
                     <Flame className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold">{newStreak} day streak</p>
-                    <p className="text-xs text-muted-foreground">
-                      {newStreak % 7 === 0
-                        ? "7-day milestone hit!"
-                        : `${7 - (newStreak % 7)} days to next shield`}
-                    </p>
-                  </div>
+  <p className="text-sm font-bold">
+    {newStreak === 1
+      ? "Day 1 done. The streak starts now."
+      : newStreak % 7 === 0
+      ? `${newStreak} days straight. You earned a shield.`
+      : newStreak >= 14
+      ? `${newStreak} days. This is becoming who you are.`
+      : newStreak >= 3
+      ? `${newStreak} days in a row. You're building a habit.`
+      : `${newStreak} days in a row. Keep going.`}
+  </p>
+  <p className="text-xs text-muted-foreground">
+    {newStreak % 7 === 0
+      ? "Next shield in 7 days"
+      : `${7 - (newStreak % 7)} days to next shield`}
+  </p>
+</div>
                 </div>
                 <p className="text-2xl font-black text-primary">{newStreak}</p>
               </div>
