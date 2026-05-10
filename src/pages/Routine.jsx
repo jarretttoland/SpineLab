@@ -734,24 +734,23 @@ export default function Routine() {
   }
 
   if (sessionActive) {
-    return (
-      <WorkoutSession
-        exercises={exercises}
-        dayOfPlan={dayIndex + 1}
-        streak={streak}
-        scoreSnapshot={scoreSnapshot}
-        newScores={completedScores}
-        mobilityCount={mobilityCount}
-        strengthCount={strengthCount}
-        onComplete={handleWorkoutComplete}
-        onSeeProgress={() => {
-          setSessionActive(false);
-          window.location.href = "/progress";
-        }}
-        onExit={() => setSessionActive(false)}
-      />
-    );
-  }
+  return (
+    <WorkoutSession
+      exercises={exercises}
+      dayOfPlan={dayIndex + 1}
+      streak={streak}
+      scoreSnapshot={scoreSnapshot}
+      newScores={completedScores}
+      mobilityCount={mobilityCount}
+      strengthCount={strengthCount}
+      onComplete={handleWorkoutComplete}
+      onExit={() => {
+        setSessionActive(false);
+        window.location.href = "/dashboard";
+      }}
+    />
+  );
+}
 
   return (
     <div className="px-4 pt-8 pb-28 max-w-lg mx-auto">
