@@ -126,7 +126,7 @@ export default function CompletionCelebration({
 
   // Use streak passed in + 1 since Routine already incremented it in DB
   // but passes the pre-increment value as the prop
-  const newStreak    = (streak ?? 0) + 1;
+  const newStreak = newScores?.currentStreak ?? (streak ?? 0) + 1;
   const shieldEarned = newStreak % 7 === 0;
 
   const [phase, setPhase]               = useState("icon");

@@ -410,7 +410,6 @@ export default function Routine() {
 
   const handleChairOnly = () => setChairOnlyToday(true);
 
-  // Returns { scoreSnapshot, newScores } so WorkoutSession can pass to CompletionCelebration
   const handleWorkoutComplete = async () => {
     if (routineCompleted) return null;
     if (!user?.id || !profile) return null;
@@ -440,7 +439,6 @@ export default function Routine() {
         newStrength     * 0.2
       );
 
-      // Score ALWAYS goes up — never down from completing a workout
       const newSpineScore = previousSpineScore >= 100
         ? 100
         : Math.min(100, Math.max(previousSpineScore + 1, rawSpineScore));
@@ -473,7 +471,6 @@ export default function Routine() {
       saveLocalJSON(STORAGE_KEYS.lockedDayIndex,  dayIndex);
       saveLocalJSON(STORAGE_KEYS.completedDayKey, todayKey);
 
-      // Return scores so WorkoutSession feeds them to CompletionCelebration
       return {
         scoreSnapshot: snapshot,
         newScores: {
@@ -481,6 +478,7 @@ export default function Routine() {
           mobilityScore:    Math.round(newMobility),
           strengthScore:    Math.round(newStrength),
           consistencyScore: Math.round(newConsistency),
+          currentStreak:    newStreak,
         },
       };
     } catch (err) {
