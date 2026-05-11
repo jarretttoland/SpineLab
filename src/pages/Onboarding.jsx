@@ -672,7 +672,7 @@ function ResultsStep({ results, saving, onBack, onConfirm, isEditMode, usedScan,
       </div>
     </div>
   );
-}
+
   const breakdownItems = [
     { label: "Mobility", value: results.breakdown.mobility },
     { label: "Strength", value: results.breakdown.strength },
