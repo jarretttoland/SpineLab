@@ -456,7 +456,223 @@ function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
   );
 }
 
-function ResultsStep({ results, saving, onBack, onConfirm, isEditMode, usedScan }) {
+function getAgeRangeMidpoint(ageRange) {
+  if (!ageRange) return 35;
+  const key = ageRange.toLowerCase().replace(/\s+/g, "").trim();
+  const matchTo   = key.match(/(\d+)to(\d+)/);
+  if (matchTo)   return Math.round((parseInt(matchTo[1])   + parseInt(matchTo[2]))   / 2);
+  const matchDash = key.match(/(\d+)-(\d+)/);
+  if (matchDash) return Math.round((parseInt(matchDash[1]) + parseInt(matchDash[2])) / 2);
+  const matchPlus  = key.match(/(\d+)(?:plus|\+)/);
+  if (matchPlus)  return parseInt(matchPlus[1]) + 7;
+  const matchUnder = key.match(/under(\d+)/);
+  if (matchUnder) return parseInt(matchUnder[1]) - 5;
+  return 35;
+}
+
+function calcSpineAge(spineScore, ageRange) {
+  const midAge = getAgeRangeMidpoint(ageRange);
+  const raw    = midAge - Math.floor((spineScore - 50) / 5);
+  return Math.max(18, Math.min(midAge + 10, raw));
+}
+
+function getResultsLevel(score) {
+  if (score >= 85) return { title: "Elite",       color: "text-amber-500",   ring: "#f59e0b", bg: "bg-amber-50 border-amber-200"   };
+  if (score >= 70) return { title: "Resilient",   color: "text-violet-500",  ring: "#8b5cf6", bg: "bg-violet-50 border-violet-200" };
+  if (score >= 55) return { title: "Strong",      color: "text-emerald-500", ring: "#10b981", bg: "bg-emerald-50 border-emerald-200" };
+  if (score >= 40) return { title: "Stabilizing", color: "text-sky-500",     ring: "#0ea5e9", bg: "bg-sky-50 border-sky-200"       };
+  return                   { title: "Rebuilding",  color: "text-rose-500",    ring: "#f43f5e", bg: "bg-rose-50 border-rose-200"     };
+}
+
+function ResultsStep({ results, saving, onBack, onConfirm, isEditMode, usedScan, ageRange }) {
+  const level    = getResultsLevel(results.score);
+  const spineAge = calcSpineAge(results.score, ageRange);
+
+  const planFocusIcons = ["🧘", "💪", "🔄", "🎯", "⚡"];
+
+  return (
+    <div className="min-h-screen px-5 pt-10 pb-10 flex flex-col bg-background">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-lg mx-auto w-full flex-1 flex flex-col"
+      >
+        {/* ── Header ── */}
+        <div className="text-center mb-8">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.1, type: "spring", stiffness: 180 }}
+            className="inline-flex items-center gap-2 bg-primary/10 text-primary text-xs font-bold px-3 py-1.5 rounded-full mb-4"
+          >
+            ✦ {isEditMode ? "Updated results" : "Your personalized plan is ready"}
+          </motion.div>
+
+          <h1 className="text-3xl font-black tracking-tight leading-tight mb-2">
+            {isEditMode ? "Plan updated" : "Welcome to SpineLab"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Based on your answers, here's where you're starting.
+          </p>
+        </div>
+
+        {/* ── Score + Spine Age hero card ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="bg-card border border-border rounded-3xl p-6 mb-4 shadow-sm"
+        >
+          <div className="flex items-center gap-4">
+            {/* Spine Score circle */}
+            <div className="flex flex-col items-center flex-1">
+              <div
+                className="w-20 h-20 rounded-full flex items-center justify-center mb-2"
+                style={{ backgroundColor: `${level.ring}18`, border: `3px solid ${level.ring}` }}
+              >
+                <span className="text-2xl font-black" style={{ color: level.ring }}>
+                  {results.score}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground font-medium">Spine Score</p>
+              <div className={`mt-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${level.bg} ${level.color}`}>
+                {level.title}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="w-px self-stretch bg-border" />
+
+            {/* Spine Age */}
+            <div className="flex flex-col items-center flex-1 text-center">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+                Spine Age
+              </p>
+              <p className={`text-5xl font-black leading-none ${level.color}`}>{spineAge}</p>
+              <p className="text-[11px] text-muted-foreground mt-2 leading-snug max-w-[110px]">
+                {spineAge <= 30 ? "Excellent spine health." : spineAge <= 40 ? "Solid foundation to build on." : "Your plan will help lower this."}
+              </p>
+            </div>
+          </div>
+
+          {/* Score bar */}
+          <div className="mt-5">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Starting level
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {results.score} / 100
+              </p>
+            </div>
+            <div className="h-2 bg-secondary rounded-full overflow-hidden">
+              <motion.div
+                className="h-full rounded-full"
+                style={{ backgroundColor: level.ring }}
+                initial={{ width: 0 }}
+                animate={{ width: `${results.score}%` }}
+                transition={{ duration: 1, ease: "easeOut", delay: 0.3 }}
+              />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ── Posture scan nudge (only if skipped) ── */}
+        {!usedScan && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.22 }}
+            className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3.5 mb-4 flex items-start gap-3"
+          >
+            <span className="text-lg leading-none mt-0.5">📷</span>
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Get a more accurate score
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                Take a posture scan from the Scan tab to unlock your real structural score and sharpen your Spine Age.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── Plan focus ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28 }}
+          className="bg-card border border-border rounded-3xl p-5 mb-4"
+        >
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+            Your plan focus
+          </p>
+          <p className="text-sm font-bold mb-4">
+            {results.archetypeLabel}
+          </p>
+          <div className="space-y-2.5">
+            {(results.planFocus || []).map((item, i) => (
+              <motion.div
+                key={item}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.32 + i * 0.06 }}
+                className="flex items-center gap-3 rounded-2xl bg-secondary/50 px-4 py-3"
+              >
+                <span className="text-base leading-none">{planFocusIcons[i] || "•"}</span>
+                <span className="text-sm font-medium text-foreground/85">{item}</span>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* ── What's next teaser ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.38 }}
+          className="rounded-2xl border border-border bg-secondary/30 px-4 py-4 mb-8"
+        >
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+            What's waiting for you
+          </p>
+          <div className="space-y-2">
+            {[
+              "Daily 5-exercise routines tailored to your plan",
+              "Spine Score that grows every session",
+              "Streak tracking and level progression",
+            ].map((line, i) => (
+              <div key={i} className="flex items-center gap-2.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                <p className="text-sm text-foreground/75">{line}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </motion.div>
+
+      {/* ── CTA ── */}
+      <div className="max-w-lg mx-auto w-full flex gap-3 pt-2">
+        <Button
+          variant="outline"
+          onClick={onBack}
+          disabled={saving}
+          className="h-14 w-14 rounded-2xl shrink-0"
+          size="icon"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+        <Button
+          onClick={onConfirm}
+          disabled={saving}
+          className="flex-1 h-14 rounded-2xl text-base font-bold"
+        >
+          {saving ? "Saving..." : isEditMode ? "Save Updated Plan" : "Start my plan →"}
+        </Button>
+      </div>
+    </div>
+  );
+}
   const breakdownItems = [
     { label: "Mobility", value: results.breakdown.mobility },
     { label: "Strength", value: results.breakdown.strength },
@@ -1215,26 +1431,27 @@ export default function Onboarding() {
   }
 
   if (phase === "results" && results) {
-    return (
-      <ResultsStep
-        results={results}
-        saving={saving}
-        usedScan={usedScan}
-        onBack={() => {
-          if (fromScan) {
-            navigate("/onboarding-scan?from=onboarding", {
-              replace: true,
-              state: { fromOnboarding: true },
-            });
-          } else {
-            setPhase("scan_option");
-          }
-        }}
-        onConfirm={handleSaveAndGoHome}
-        isEditMode={isEditMode}
-      />
-    );
-  }
+  return (
+    <ResultsStep
+      results={results}
+      saving={saving}
+      usedScan={usedScan}
+      ageRange={followUpAnswers.ageRange}
+      onBack={() => {
+        if (fromScan) {
+          navigate("/onboarding-scan?from=onboarding", {
+            replace: true,
+            state: { fromOnboarding: true },
+          });
+        } else {
+          setPhase("scan_option");
+        }
+      }}
+      onConfirm={handleSaveAndGoHome}
+      isEditMode={isEditMode}
+    />
+  );
+}
 
   return null;
 }
