@@ -1,3 +1,6 @@
+/* FILE: src/index.css
+   Replace your existing src/index.css with this entire file. */
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
@@ -128,6 +131,28 @@
     text-rendering: optimizeLegibility;
 
     background: hsl(var(--background));
+
+    /* Premium polish */
+    font-feature-settings: "cv11", "ss01", "ss03";
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Keep text inputs selectable */
+  input,
+  textarea,
+  [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Tighter, more balanced headings */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
   }
 
   #root {
@@ -136,14 +161,12 @@
     overflow-x: hidden;
   }
 
-  /* MAIN APP POSITIONING FIX */
+  /* MAIN APP POSITIONING — owns safe-area for the whole app */
   .app-shell {
     width: 100%;
     min-height: 100dvh;
 
-    /* THIS IS THE IMPORTANT CHANGE */
     padding-top: calc(env(safe-area-inset-top) + 14px);
-
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
@@ -151,6 +174,10 @@
     overflow-x: hidden;
 
     background: hsl(var(--background));
+
+    /* So child <Screen> can flex-1 inside this */
+    display: flex;
+    flex-direction: column;
   }
 
   button {
@@ -166,7 +193,7 @@
 
   img,
   video,
- canvas {
+  canvas {
     max-width: 100%;
     display: block;
   }

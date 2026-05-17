@@ -1,13 +1,11 @@
 // FILE: src/pages/PostureScan.jsx
 // Replace your existing file with this entire file.
 //
-// What's new for the Apple rejection:
-//   - Imports the new ScanConsentModal
-//   - Adds a "consent" phase that runs BEFORE camera ever opens
-//   - Checks profile.ai_consent_at — if null, shows consent modal
-//   - On accept, writes ai_consent_at timestamp to Supabase
-//   - On decline, returns user to the guide screen
-//   - All the previous fixes (loading state, save error surface, etc.) preserved
+// What's new in this version (on top of the Apple-rejection fixes):
+//   - Imports scheduleReScanReminder from the new notifications lib
+//   - After every successful scan, pushes the next "re-scan reminder"
+//     notification 7 days into the future (does nothing if the user
+//     hasn't enabled re-scan notifications in Account)
 
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -24,6 +22,7 @@ import {
   upsertProfile,
   createPostureScan,
 } from "@/lib/postureScanSupabase";
+import { scheduleReScanReminder } from "@/lib/notifications";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -285,6 +284,10 @@ export default function PostureScan() {
       newSpineScore,
     });
     setPhase("results");
+
+    // Push the next re-scan reminder 7 days out. No-ops if the user
+    // hasn't enabled re-scan notifications in Account → Notifications.
+    scheduleReScanReminder(7);
   };
 
   const handleNewScan = () => {

@@ -1,14 +1,12 @@
 // FILE: src/pages/Account.jsx
 // Replace your existing file with this entire file.
 //
-// What's new (for the Apple resubmit):
-//   - Imports BookOpen and Cpu icons
-//   - New "AI Posture Scanning" row in a Privacy Controls section.
-//     Shows current consent state. Tap to revoke (sets ai_consent_at = null,
-//     so user sees consent modal again on next scan).
-//   - New "Methodology & Sources" row in Privacy & Legal section, routes
-//     to /sources (the new citations page).
-//   - Everything else preserved from your original.
+// What's new beyond the Apple-rejection fixes:
+//   - "Notifications" section with two controls:
+//     * Daily routine reminder (toggle + time picker)
+//     * Re-scan reminder (toggle)
+//   - First time the user enables either, we request iOS notification permission.
+//   - Settings persist in localStorage via src/lib/notifications.js.
 
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
@@ -26,7 +24,19 @@ import {
   RefreshCw,
   BookOpen,
   Cpu,
+  Bell,
+  Calendar,
 } from "lucide-react";
+import {
+  requestPermission,
+  checkPermission,
+  scheduleDailyRoutine,
+  cancelDailyRoutine,
+  enableReScanReminder,
+  cancelReScanReminder,
+  getPreferences,
+  formatTime,
+} from "@/lib/notifications";
 
 const STORAGE_KEYS = {
   rewardPoints: "spinelab_reward_points",
@@ -88,6 +98,20 @@ function AccountRow({
   );
 }
 
+function StatusChip({ on, busy }) {
+  return (
+    <span
+      className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+        on
+          ? "bg-emerald-100 text-emerald-700"
+          : "bg-secondary text-muted-foreground"
+      }`}
+    >
+      {busy ? "..." : on ? "ON" : "OFF"}
+    </span>
+  );
+}
+
 function clearLocalProgress() {
   try {
     localStorage.removeItem(STORAGE_KEYS.rewardPoints);
@@ -109,6 +133,13 @@ export default function Account() {
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [updatingConsent, setUpdatingConsent] = useState(false);
+
+  // Notification preferences
+  const [dailyEnabled, setDailyEnabled] = useState(false);
+  const [dailyHour, setDailyHour] = useState(8);
+  const [dailyMinute, setDailyMinute] = useState(0);
+  const [rescanEnabled, setRescanEnabled] = useState(true);
+  const [notifBusy, setNotifBusy] = useState({ daily: false, rescan: false });
 
   useEffect(() => {
     let mounted = true;
@@ -147,6 +178,13 @@ export default function Account() {
 
     loadAccount();
 
+    // Load notification preferences from localStorage
+    const prefs = getPreferences();
+    setDailyEnabled(prefs.dailyEnabled);
+    setDailyHour(prefs.dailyHour);
+    setDailyMinute(prefs.dailyMinute);
+    setRescanEnabled(prefs.rescanEnabled);
+
     return () => {
       mounted = false;
     };
@@ -172,23 +210,11 @@ export default function Account() {
     });
   };
 
-  const handlePrivacy = () => {
-    navigate("/privacy-policy");
-  };
+  const handlePrivacy = () => navigate("/privacy-policy");
+  const handleTerms = () => navigate("/terms-of-service");
+  const handleSources = () => navigate("/sources");
 
-  const handleTerms = () => {
-    navigate("/terms-of-service");
-  };
-
-  const handleSources = () => {
-    navigate("/sources");
-  };
-
-  // Toggle AI scanning consent.
-  // If consented now → revoke (set ai_consent_at to null).
-  // If not consented → re-enable (set ai_consent_at to now).
-  // Re-enabling here is the explicit "I want this back" choice; the full
-  // consent modal still appears on the next scan if needed.
+  // ── AI consent toggle ──
   const handleToggleAIConsent = async () => {
     if (!user?.id || updatingConsent) return;
 
@@ -218,21 +244,79 @@ export default function Account() {
       setProfile(data || null);
     } catch (err) {
       console.error("[Account] consent toggle error:", err);
-      alert(
-        `Could not update AI consent.${err?.message ? ` ${err.message}` : ""}`
-      );
+      alert(`Could not update AI consent.${err?.message ? ` ${err.message}` : ""}`);
     } finally {
       setUpdatingConsent(false);
     }
   };
 
+  // ── Notification toggles ──
+
+  const ensurePermissionOrAlert = async () => {
+    const already = await checkPermission();
+    if (already) return true;
+    const granted = await requestPermission();
+    if (!granted) {
+      alert(
+        "Notifications are disabled. Enable them in Settings → SpineLab → Notifications, then come back."
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const handleToggleDaily = async () => {
+    if (notifBusy.daily) return;
+    setNotifBusy((b) => ({ ...b, daily: true }));
+    try {
+      if (!dailyEnabled) {
+        const ok = await ensurePermissionOrAlert();
+        if (!ok) return;
+        await scheduleDailyRoutine(dailyHour, dailyMinute);
+        setDailyEnabled(true);
+      } else {
+        await cancelDailyRoutine();
+        setDailyEnabled(false);
+      }
+    } finally {
+      setNotifBusy((b) => ({ ...b, daily: false }));
+    }
+  };
+
+  const handleTimeChange = async (e) => {
+    const [h, m] = e.target.value.split(":").map(Number);
+    setDailyHour(h);
+    setDailyMinute(m);
+    if (dailyEnabled) {
+      await scheduleDailyRoutine(h, m);
+    }
+  };
+
+  const handleToggleRescan = async () => {
+    if (notifBusy.rescan) return;
+    setNotifBusy((b) => ({ ...b, rescan: true }));
+    try {
+      if (!rescanEnabled) {
+        const ok = await ensurePermissionOrAlert();
+        if (!ok) return;
+        await enableReScanReminder();
+        setRescanEnabled(true);
+      } else {
+        await cancelReScanReminder();
+        setRescanEnabled(false);
+      }
+    } finally {
+      setNotifBusy((b) => ({ ...b, rescan: false }));
+    }
+  };
+
+  // ── Reset / Delete ──
+
   const handleResetProgress = async () => {
     if (!user?.id || resetting) return;
-
     const confirmed = window.confirm(
       "Reset your progress? This will clear scans, streaks, scores, and onboarding answers."
     );
-
     if (!confirmed) return;
 
     try {
@@ -242,7 +326,6 @@ export default function Account() {
         .from("posture_scans")
         .delete()
         .eq("user_id", user.id);
-
       if (scansError) throw scansError;
 
       const resetPayload = {
@@ -270,7 +353,6 @@ export default function Account() {
 
       clearLocalProgress();
       setProfile(data || null);
-
       window.location.href = "/onboarding";
     } catch (err) {
       console.error("[Account] reset progress error:", err);
@@ -282,25 +364,20 @@ export default function Account() {
 
   const handleDeleteAccount = async () => {
     if (!user?.id || deleting) return;
-
     const confirmed = window.confirm(
       "Delete your account? This permanently removes all SpineLab data."
     );
-
     if (!confirmed) return;
 
     try {
       setDeleting(true);
-
       const { error } = await supabase.functions.invoke("delete-account", {
         body: {},
       });
-
       if (error) throw error;
 
       clearLocalProgress();
       await supabase.auth.signOut();
-
       window.location.href = "/";
     } catch (err) {
       console.error("[Account] delete account error:", err);
@@ -318,7 +395,6 @@ export default function Account() {
 
   const spineScore =
     typeof profile?.spine_score === "number" ? profile.spine_score : 0;
-
   const aiConsented = !!profile?.ai_consent_at;
 
   if (loading) {
@@ -340,7 +416,6 @@ export default function Account() {
           <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
             <User className="w-6 h-6 text-primary" />
           </div>
-
           <div>
             <h1 className="text-2xl font-bold">{displayName}</h1>
             <p className="text-sm text-muted-foreground">{user?.email}</p>
@@ -351,13 +426,11 @@ export default function Account() {
           <p className="text-sm font-semibold text-muted-foreground mb-2">
             Current Spine Score
           </p>
-
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="text-4xl font-bold tracking-tight">{spineScore}</p>
               <p className="text-sm text-muted-foreground mt-1">out of 100</p>
             </div>
-
             <div className="rounded-2xl bg-primary/10 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-primary">
                 SpineLab
@@ -380,7 +453,51 @@ export default function Account() {
             />
           </section>
 
-          {/* NEW SECTION — Apple 5.1.1 / 5.1.2 requirement */}
+          {/* ── NOTIFICATIONS ── */}
+          <section>
+            <h2 className="text-sm font-bold mb-3">Notifications</h2>
+            <div className="space-y-3">
+              <AccountRow
+                icon={Bell}
+                title="Daily routine reminder"
+                subtitle={
+                  dailyEnabled
+                    ? `Every day at ${formatTime(dailyHour, dailyMinute)}`
+                    : "Off"
+                }
+                onClick={handleToggleDaily}
+                disabled={notifBusy.daily}
+                trailing={<StatusChip on={dailyEnabled} busy={notifBusy.daily} />}
+              />
+
+              {dailyEnabled && (
+                <div className="ml-2 pl-4 border-l-2 border-border pt-1">
+                  <label className="block text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                    Reminder time
+                  </label>
+                  <input
+                    type="time"
+                    value={`${String(dailyHour).padStart(2, "0")}:${String(
+                      dailyMinute
+                    ).padStart(2, "0")}`}
+                    onChange={handleTimeChange}
+                    className="rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium"
+                  />
+                </div>
+              )}
+
+              <AccountRow
+                icon={Calendar}
+                title="Re-scan reminder"
+                subtitle="Nudges you to scan again after 7 days"
+                onClick={handleToggleRescan}
+                disabled={notifBusy.rescan}
+                trailing={<StatusChip on={rescanEnabled} busy={notifBusy.rescan} />}
+              />
+            </div>
+          </section>
+
+          {/* ── PRIVACY CONTROLS ── */}
           <section>
             <h2 className="text-sm font-bold mb-3">Privacy Controls</h2>
             <AccountRow
@@ -393,17 +510,7 @@ export default function Account() {
               }
               onClick={handleToggleAIConsent}
               disabled={updatingConsent}
-              trailing={
-                <span
-                  className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                    aiConsented
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-secondary text-muted-foreground"
-                  }`}
-                >
-                  {updatingConsent ? "..." : aiConsented ? "ON" : "OFF"}
-                </span>
-              }
+              trailing={<StatusChip on={aiConsented} busy={updatingConsent} />}
             />
           </section>
 
@@ -420,7 +527,6 @@ export default function Account() {
                 title="Terms of Service"
                 onClick={handleTerms}
               />
-              {/* NEW — Apple 1.4.1 requirement */}
               <AccountRow
                 icon={BookOpen}
                 title="Methodology & Sources"
@@ -440,7 +546,6 @@ export default function Account() {
                 onClick={handleResetProgress}
                 disabled={resetting || deleting}
               />
-
               <AccountRow
                 icon={Trash2}
                 title={deleting ? "Deleting Account..." : "Delete Account"}
