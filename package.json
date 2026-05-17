@@ -12,6 +12,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.3.3",
+    "@capacitor/core": "^8.3.3",
+    "@capacitor/ios": "^8.3.3",
+    "@capacitor/local-notifications": "^8.2.0",
+    "@capacitor/status-bar": "^8.0.2",
     "@hello-pangea/dnd": "^17.0.0",
     "@hookform/resolvers": "^4.1.2",
     "@mediapipe/tasks-vision": "^0.10.34",
@@ -80,6 +85,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@eslint/js": "^9.19.0",
     "@types/node": "^22.13.5",
     "@types/react": "^18.2.66",

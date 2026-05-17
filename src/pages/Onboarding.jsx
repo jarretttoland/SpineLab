@@ -1,3 +1,17 @@
+// FILE: src/pages/Onboarding.jsx
+// Replace your existing file with this entire file.
+//
+// Pre-Apple-submission changes:
+//   1. ScanOptionStep now matches IntroStep's structural pattern
+//      (no more justify-center, so it flows top-down like every
+//      other onboarding screen — fixes the "smaller / inconsistent"
+//      feel)
+//   2. Premium copy: confident headline, tighter subtitle,
+//      benefit-led bullets with check icons, "Recommended" badge,
+//      and a small privacy reassurance row
+//   3. Removed dead/unreachable code in ResultsStep (the second
+//      return block was never executed)
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -11,7 +25,15 @@ import {
   getInitialConsistencyScore,
 } from "@/lib/spineScore";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight, Shield, FileText, Camera } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Shield,
+  ShieldCheck,
+  FileText,
+  Camera,
+  Check,
+} from "lucide-react";
 
 const PAIN_AREA_OPTIONS = [
   { value: "neck", label: "Neck" },
@@ -390,47 +412,81 @@ function IntroStep({ onStart, onPrivacy, onTerms }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// SCAN OPTION STEP — refactored to match IntroStep pattern
+// ─────────────────────────────────────────────────────────────
+
 function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
   return (
-    <div className="min-h-screen px-6 pt-12 pb-10 flex flex-col">
+    <div className="min-h-screen px-6 pt-14 pb-10 flex flex-col">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-lg mx-auto w-full flex-1 flex flex-col justify-center"
+        className="max-w-lg mx-auto w-full flex-1 flex flex-col"
       >
-        <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-5">
-          <Camera className="w-6 h-6 text-primary" />
+        {/* Header */}
+        <div className="mb-8">
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-5">
+            <Camera className="w-6 h-6 text-primary" />
+          </div>
+
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary mb-3">
+            Optional · about 30 seconds
+          </p>
+
+          <h1 className="text-3xl font-bold tracking-tight leading-tight mb-3">
+            Get your real Spine Score
+          </h1>
+
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Your answers give us a great starting point. A quick posture scan
+            makes it precise.
+          </p>
         </div>
 
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary mb-3">
-          Optional posture scan
-        </p>
+        {/* Benefits card with Recommended badge */}
+        <div className="rounded-3xl border border-border bg-card p-5 mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold">What the scan adds</p>
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary bg-primary/10 px-2.5 py-1 rounded-full">
+              Recommended
+            </span>
+          </div>
 
-        <h1 className="text-3xl font-bold tracking-tight leading-tight mb-3">
-          Want your real posture score?
-        </h1>
-
-        <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-          Your answers are enough to build your plan, but a quick posture scan gives
-          SpineLab a real posture score before showing your final Spine Score.
-        </p>
-
-        <div className="rounded-3xl border border-border bg-card p-5 mb-8">
-          <p className="text-sm font-semibold mb-3">Recommended</p>
-          <div className="space-y-2 text-sm text-muted-foreground">
-            <p>• Takes less than a minute</p>
-            <p>• Gives you an actual posture score</p>
-            <p>• Makes your starting Spine Score more accurate</p>
+          <div className="space-y-3">
+            {[
+              "A measured posture score — not just an estimate",
+              "Your real Spine Score from day one",
+              "An accurate baseline to track progress against",
+            ].map((line) => (
+              <div key={line} className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <Check className="w-3 h-3 text-primary" strokeWidth={3} />
+                </div>
+                <p className="text-sm font-medium text-foreground/85 leading-snug">
+                  {line}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
 
+        {/* Privacy reassurance */}
+        <div className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-secondary/50 mb-8">
+          <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Your photo is used only for analysis. Delete anytime from your account.
+          </p>
+        </div>
+
+        {/* CTAs */}
         <div className="space-y-3">
           <Button
             onClick={onScanNow}
             disabled={saving}
             className="w-full h-14 rounded-2xl text-base font-semibold"
           >
-            {saving ? "Saving..." : "Start posture scan"}
+            {saving ? "Saving…" : "Start posture scan"}
           </Button>
 
           <Button
@@ -446,9 +502,9 @@ function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
             type="button"
             onClick={onBack}
             disabled={saving}
-            className="w-full text-sm text-muted-foreground mt-2"
+            className="w-full text-sm text-muted-foreground py-2"
           >
-            Back to questions
+            Back
           </button>
         </div>
       </motion.div>
@@ -668,119 +724,6 @@ function ResultsStep({ results, saving, onBack, onConfirm, isEditMode, usedScan,
           className="flex-1 h-14 rounded-2xl text-base font-bold"
         >
           {saving ? "Saving..." : isEditMode ? "Save Updated Plan" : "Start my plan →"}
-        </Button>
-      </div>
-    </div>
-  );
-
-  const breakdownItems = [
-    { label: "Mobility", value: results.breakdown.mobility },
-    { label: "Strength", value: results.breakdown.strength },
-    { label: "Posture", value: results.breakdown.posture, estimated: !usedScan },
-  ];
-
-  return (
-    <div className="min-h-screen px-6 pt-12 pb-10 flex flex-col">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-lg mx-auto w-full flex-1"
-      >
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary mb-3">
-          {isEditMode ? "Your updated results" : "Your starting results"}
-        </p>
-
-        <h1 className="text-3xl font-bold tracking-tight leading-tight mb-3">
-          Your Spine Score is {results.score}
-        </h1>
-
-        <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-          {usedScan
-            ? "This score uses your answers plus your posture scan."
-            : "This score is based on your answers. You can scan your posture later from the Scan tab."}
-        </p>
-
-        <div className="rounded-3xl border border-border bg-card p-6 mb-5">
-          <p className="text-sm font-semibold mb-2">Score</p>
-          <div className="flex items-end gap-2">
-            <span className="text-5xl font-bold tracking-tight">{results.score}</span>
-            <span className="text-muted-foreground mb-1">/100</span>
-          </div>
-          <p className="text-sm text-muted-foreground mt-3">
-            Structural baseline: {results.structuralScore} · Consistency start:{" "}
-            {results.consistencyScore}
-          </p>
-        </div>
-
-        <div className="rounded-3xl border border-border bg-card p-5 mb-5">
-          <p className="text-sm font-semibold mb-4">Score breakdown</p>
-          <div className="space-y-4">
-            {breakdownItems.map((item) => (
-              <div key={item.label}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-foreground/80">{item.label}</span>
-                    {item.estimated && (
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        estimated
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-sm font-semibold">{item.value}</span>
-                </div>
-
-                <div className="h-2 rounded-full bg-secondary overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all"
-                    style={{ width: `${item.value}%` }}
-                  />
-                </div>
-
-                {item.label === "Posture" && item.estimated && (
-                  <p className="text-[11px] text-muted-foreground mt-2">
-                    Estimated. A posture scan will provide your actual posture score.
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-border bg-card p-5 mb-8">
-          <p className="text-sm font-semibold mb-2">Plan focus</p>
-          <p className="text-sm text-muted-foreground mb-4">
-            {results.archetypeLabel}
-          </p>
-          <div className="space-y-2">
-            {results.planFocus.map((item) => (
-              <div
-                key={item}
-                className="rounded-2xl bg-secondary/50 px-4 py-3 text-sm text-foreground/80"
-              >
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
-      </motion.div>
-
-      <div className="max-w-lg mx-auto w-full flex gap-3">
-        <Button
-          variant="outline"
-          onClick={onBack}
-          disabled={saving}
-          className="h-14 w-14 rounded-2xl shrink-0"
-          size="icon"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
-
-        <Button
-          onClick={onConfirm}
-          disabled={saving}
-          className="flex-1 h-14 rounded-2xl text-base font-semibold"
-        >
-          {saving ? "Saving..." : isEditMode ? "Save Updated Plan" : "See My Plan"}
         </Button>
       </div>
     </div>
@@ -1276,38 +1219,38 @@ export default function Onboarding() {
   };
 
   const handleSaveAndGoHome = async () => {
-  if (!user?.id || !results || saving) return;
+    if (!user?.id || !results || saving) return;
 
-  setSaving(true);
+    setSaving(true);
 
-  try {
-    const answers = buildAnswers();
+    try {
+      const answers = buildAnswers();
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        onboarding_complete: true,
-        age_range:           followUpAnswers.ageRange,
-        movement_response:   followUpAnswers.movementResponse,
-        activity_level:      followUpAnswers.activityLevel,
-        spine_surgery:       followUpAnswers.spineSurgery === "yes",
-        primary_pain:        answers.primaryPain,
-        primary_goal:        answers.primaryGoal,
-        pain_areas:          painAreas,
-        updated_at:          new Date().toISOString(),
-      })
-      .eq("id", user.id);
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          onboarding_complete: true,
+          age_range:           followUpAnswers.ageRange,
+          movement_response:   followUpAnswers.movementResponse,
+          activity_level:      followUpAnswers.activityLevel,
+          spine_surgery:       followUpAnswers.spineSurgery === "yes",
+          primary_pain:        answers.primaryPain,
+          primary_goal:        answers.primaryGoal,
+          pain_areas:          painAreas,
+          updated_at:          new Date().toISOString(),
+        })
+        .eq("id", user.id);
 
-    if (error) throw error;
+      if (error) throw error;
 
-    navigate("/dashboard", { replace: true });
-  } catch (err) {
-    console.error("[Onboarding] final save error:", err);
-    alert("We couldn't save your plan yet. Please try again.");
-  } finally {
-    setSaving(false);
-  }
-};
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      console.error("[Onboarding] final save error:", err);
+      alert("We couldn't save your plan yet. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loadingProfile) {
     return (
@@ -1431,27 +1374,27 @@ export default function Onboarding() {
   }
 
   if (phase === "results" && results) {
-  return (
-    <ResultsStep
-      results={results}
-      saving={saving}
-      usedScan={usedScan}
-      ageRange={followUpAnswers.ageRange}
-      onBack={() => {
-        if (fromScan) {
-          navigate("/onboarding-scan?from=onboarding", {
-            replace: true,
-            state: { fromOnboarding: true },
-          });
-        } else {
-          setPhase("scan_option");
-        }
-      }}
-      onConfirm={handleSaveAndGoHome}
-      isEditMode={isEditMode}
-    />
-  );
-}
+    return (
+      <ResultsStep
+        results={results}
+        saving={saving}
+        usedScan={usedScan}
+        ageRange={followUpAnswers.ageRange}
+        onBack={() => {
+          if (fromScan) {
+            navigate("/onboarding-scan?from=onboarding", {
+              replace: true,
+              state: { fromScan: true },
+            });
+          } else {
+            setPhase("scan_option");
+          }
+        }}
+        onConfirm={handleSaveAndGoHome}
+        isEditMode={isEditMode}
+      />
+    );
+  }
 
   return null;
 }

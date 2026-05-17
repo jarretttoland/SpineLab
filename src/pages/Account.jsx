@@ -1,3 +1,15 @@
+// FILE: src/pages/Account.jsx
+// Replace your existing file with this entire file.
+//
+// What's new (for the Apple resubmit):
+//   - Imports BookOpen and Cpu icons
+//   - New "AI Posture Scanning" row in a Privacy Controls section.
+//     Shows current consent state. Tap to revoke (sets ai_consent_at = null,
+//     so user sees consent modal again on next scan).
+//   - New "Methodology & Sources" row in Privacy & Legal section, routes
+//     to /sources (the new citations page).
+//   - Everything else preserved from your original.
+
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +24,8 @@ import {
   Trash2,
   User,
   RefreshCw,
+  BookOpen,
+  Cpu,
 } from "lucide-react";
 
 const STORAGE_KEYS = {
@@ -28,6 +42,7 @@ function AccountRow({
   onClick,
   danger = false,
   disabled = false,
+  trailing = null,
 }) {
   return (
     <button
@@ -45,9 +60,7 @@ function AccountRow({
             danger ? "bg-red-100" : "bg-primary/10"
           }`}
         >
-          <Icon
-            className={`w-5 h-5 ${danger ? "text-red-600" : "text-primary"}`}
-          />
+          <Icon className={`w-5 h-5 ${danger ? "text-red-600" : "text-primary"}`} />
         </div>
 
         <div className="min-w-0">
@@ -64,11 +77,13 @@ function AccountRow({
         </div>
       </div>
 
-      <ChevronRight
-        className={`w-4 h-4 shrink-0 ${
-          danger ? "text-red-400" : "text-muted-foreground"
-        }`}
-      />
+      {trailing ?? (
+        <ChevronRight
+          className={`w-4 h-4 shrink-0 ${
+            danger ? "text-red-400" : "text-muted-foreground"
+          }`}
+        />
+      )}
     </button>
   );
 }
@@ -93,6 +108,7 @@ export default function Account() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [updatingConsent, setUpdatingConsent] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -164,6 +180,52 @@ export default function Account() {
     navigate("/terms-of-service");
   };
 
+  const handleSources = () => {
+    navigate("/sources");
+  };
+
+  // Toggle AI scanning consent.
+  // If consented now → revoke (set ai_consent_at to null).
+  // If not consented → re-enable (set ai_consent_at to now).
+  // Re-enabling here is the explicit "I want this back" choice; the full
+  // consent modal still appears on the next scan if needed.
+  const handleToggleAIConsent = async () => {
+    if (!user?.id || updatingConsent) return;
+
+    const currentlyConsented = !!profile?.ai_consent_at;
+    const confirmMsg = currentlyConsented
+      ? "Revoke AI scanning consent? You won't be able to take new posture scans until you re-enable it. Your existing scans will not be deleted."
+      : "Re-enable AI posture scanning?";
+
+    const confirmed = window.confirm(confirmMsg);
+    if (!confirmed) return;
+
+    try {
+      setUpdatingConsent(true);
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({
+          ai_consent_at: currentlyConsented ? null : new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setProfile(data || null);
+    } catch (err) {
+      console.error("[Account] consent toggle error:", err);
+      alert(
+        `Could not update AI consent.${err?.message ? ` ${err.message}` : ""}`
+      );
+    } finally {
+      setUpdatingConsent(false);
+    }
+  };
+
   const handleResetProgress = async () => {
     if (!user?.id || resetting) return;
 
@@ -212,9 +274,7 @@ export default function Account() {
       window.location.href = "/onboarding";
     } catch (err) {
       console.error("[Account] reset progress error:", err);
-      alert(
-        `Could not reset progress.${err?.message ? ` ${err.message}` : ""}`
-      );
+      alert(`Could not reset progress.${err?.message ? ` ${err.message}` : ""}`);
     } finally {
       setResetting(false);
     }
@@ -244,9 +304,7 @@ export default function Account() {
       window.location.href = "/";
     } catch (err) {
       console.error("[Account] delete account error:", err);
-      alert(
-        `Could not delete account.${err?.message ? ` ${err.message}` : ""}`
-      );
+      alert(`Could not delete account.${err?.message ? ` ${err.message}` : ""}`);
     } finally {
       setDeleting(false);
     }
@@ -260,6 +318,8 @@ export default function Account() {
 
   const spineScore =
     typeof profile?.spine_score === "number" ? profile.spine_score : 0;
+
+  const aiConsented = !!profile?.ai_consent_at;
 
   if (loading) {
     return (
@@ -320,6 +380,33 @@ export default function Account() {
             />
           </section>
 
+          {/* NEW SECTION — Apple 5.1.1 / 5.1.2 requirement */}
+          <section>
+            <h2 className="text-sm font-bold mb-3">Privacy Controls</h2>
+            <AccountRow
+              icon={Cpu}
+              title="AI Posture Scanning"
+              subtitle={
+                aiConsented
+                  ? "Enabled · tap to revoke consent"
+                  : "Disabled · tap to enable"
+              }
+              onClick={handleToggleAIConsent}
+              disabled={updatingConsent}
+              trailing={
+                <span
+                  className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                    aiConsented
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {updatingConsent ? "..." : aiConsented ? "ON" : "OFF"}
+                </span>
+              }
+            />
+          </section>
+
           <section>
             <h2 className="text-sm font-bold mb-3">Privacy & Legal</h2>
             <div className="space-y-3">
@@ -332,6 +419,13 @@ export default function Account() {
                 icon={FileText}
                 title="Terms of Service"
                 onClick={handleTerms}
+              />
+              {/* NEW — Apple 1.4.1 requirement */}
+              <AccountRow
+                icon={BookOpen}
+                title="Methodology & Sources"
+                subtitle="Research behind SpineLab"
+                onClick={handleSources}
               />
             </div>
           </section>

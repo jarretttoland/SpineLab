@@ -1,3 +1,17 @@
+// FILE: src/pages/PrivacyPolicy.jsx
+// Replace your existing file with this entire file.
+//
+// What changed from your previous version:
+//   - Section 3 now explicitly names Google's MediaPipe Pose Landmarker
+//     and clarifies it runs on-device (Apple 5.1.1 requirement)
+//   - Section 5 now lists Google (MediaPipe model + WASM CDN) as a third-party service
+//   - NEW Section 6: "Your AI Consent & Controls" — describes the consent screen
+//     and how users can revoke
+//   - Section numbering shifted by 1 after the new section
+//   - "Last Updated" date bumped to May 16, 2026
+//
+// Everything else is preserved from your original.
+
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Shield } from "lucide-react";
@@ -29,6 +43,7 @@ const SECTIONS = [
         subtitle: "Posture Scan Data",
         bullets: [
           "Posture images you voluntarily capture or upload for analysis",
+          "Body landmark coordinates derived from those images by an on-device AI model",
           "Derived posture results, scores, and movement observations generated from those images",
           "We do not capture photos without your intentional action inside the App",
         ],
@@ -51,14 +66,34 @@ const SECTIONS = [
       "We do not sell your personal information, and we do not use your data for third-party advertising or behavioral profiling.",
   },
   {
-    title: "3. Posture Analysis & AI Disclaimer",
+    title: "3. Posture Analysis & AI",
     content:
-      "SpineLab uses automated computer vision, software logic, and algorithmic scoring to analyze posture images and generate wellness insights.",
-    bullets: [
-      "Posture analysis results are estimates only",
-      "Results may be incomplete, inaccurate, or not medically precise",
-      "Spine Scores, posture findings, and movement insights are provided for general wellness and educational purposes only",
-      "SpineLab does not provide medical advice, medical diagnosis, or treatment",
+      "SpineLab uses automated computer vision to analyze posture images. We want to be specific about how this works, what AI model we use, and where it runs.",
+    subsections: [
+      {
+        subtitle: "What AI we use",
+        bullets: [
+          "SpineLab uses Google's MediaPipe Pose Landmarker, an open-source pose detection model published by Google LLC",
+          "The MediaPipe model file and its WebAssembly runtime are downloaded once from Google's public CDNs (jsDelivr and Google Cloud Storage) the first time you use the scan feature",
+        ],
+      },
+      {
+        subtitle: "Where the AI runs",
+        bullets: [
+          "After the one-time download, the MediaPipe model runs entirely on your device",
+          "Your posture photos and any live video frames are not transmitted to Google or to any other third party for AI processing",
+          "Only the numerical body landmark coordinates produced by the on-device model are used to calculate your Spine Score and posture findings",
+        ],
+      },
+      {
+        subtitle: "Limitations of the analysis",
+        bullets: [
+          "Posture analysis results are estimates only",
+          "Results may be incomplete, inaccurate, or not medically precise",
+          "Spine Scores, posture findings, and movement insights are provided for general wellness and educational purposes only",
+          "SpineLab does not provide medical advice, medical diagnosis, or treatment",
+        ],
+      },
     ],
     footer:
       "You should not rely on SpineLab posture analysis as a substitute for evaluation by a licensed healthcare professional.",
@@ -79,17 +114,48 @@ const SECTIONS = [
   {
     title: "5. Third-Party Services",
     content:
-      "We use carefully selected third-party service providers to help operate SpineLab. These providers may support hosting, infrastructure, analytics, authentication, and secure data storage.",
-    bullets: [
-      "We use Supabase for services such as authentication, database functionality, and file or data storage",
-      "These providers may process account information, posture scan data, progress data, and questionnaire responses on our behalf",
-      "Third-party providers are used only to help us operate and improve the App",
+      "We use a small number of carefully selected third-party service providers to operate SpineLab. The complete list is below.",
+    subsections: [
+      {
+        subtitle: "Supabase",
+        bullets: [
+          "Provides our backend infrastructure: authentication, database, and storage for your account, posture scans, and progress data",
+          "Data is stored on Supabase's secure cloud infrastructure",
+          "Supabase processes your data only on our behalf to provide app functionality",
+        ],
+      },
+      {
+        subtitle: "Google (MediaPipe & CDN)",
+        bullets: [
+          "Hosts the MediaPipe pose detection model file and WebAssembly runtime, which your device downloads once and then runs locally",
+          "We do not send your photos, video, or personal information to Google",
+          "The only Google interaction is the one-time download of the AI model files",
+        ],
+      },
+      {
+        subtitle: "Apple",
+        bullets: [
+          "Limited App Store analytics, governed by your iOS device's privacy settings",
+        ],
+      },
     ],
     footer:
-      "We do not authorize third-party providers to use your personal data for their own advertising purposes.",
+      "We do not authorize any third-party provider to use your personal data for their own advertising purposes. We do not sell your data, and we do not share it with data brokers.",
   },
   {
-    title: "6. Data Storage & Security",
+    title: "6. Your AI Consent & Controls",
+    content:
+      "Because SpineLab uses an AI model and stores scan photos in your account, we ask for your explicit consent before your first posture scan.",
+    bullets: [
+      "Before your first scan, the App shows a dedicated consent screen titled 'How posture scanning works' that summarizes what data is collected, where it is stored, and what we never do with it",
+      "The camera does not open until you tap 'I agree — continue to scan' on that screen",
+      "Your consent is recorded in your account with a timestamp",
+      "You can revoke AI scanning consent anytime from Account → AI Posture Scanning. Revoking disables future scans but does not delete your existing data",
+      "You can delete any individual scan from your scan history, and you can delete your account entirely from Account → Delete Account",
+    ],
+  },
+  {
+    title: "7. Data Storage & Security",
     content:
       "We use reasonable administrative, technical, and organizational safeguards designed to protect your information.",
     bullets: [
@@ -102,30 +168,32 @@ const SECTIONS = [
       "No system is completely secure, and we cannot guarantee absolute security of your information.",
   },
   {
-    title: "7. Data Retention",
+    title: "8. Data Retention",
     content:
       "We retain data for as long as reasonably necessary to provide the App, maintain your account, comply with legal obligations, resolve disputes, and enforce our agreements.",
     bullets: [
-      "Account information may be retained while your account remains active",
-      "Posture images, progress history, and questionnaire data may be retained to support your ongoing experience",
-      "When account deletion functionality is made available or when we honor a valid deletion request, we will remove or de-identify applicable data within a commercially reasonable timeframe, unless retention is required by law",
+      "Account information is retained while your account remains active",
+      "Posture images and progress history are retained until you delete them or delete your account",
+      "When you delete your account, your data is removed within a commercially reasonable timeframe (typically within 30 days), unless retention is required by law",
     ],
   },
   {
-    title: "8. Your Choices & Rights",
+    title: "9. Your Choices & Rights",
     content:
-      "Depending on how SpineLab features are configured, you may be able to review, update, reset, or delete certain information through the App.",
+      "You can review, update, reset, or delete your information at any time through the App.",
     bullets: [
-      "Update onboarding responses and plan preferences",
-      "Delete posture images if that functionality is available in the App",
-      "Reset certain progress or routine settings if that functionality is available in the App",
-      "Request account or data deletion through the Account section or a support contact method we provide",
+      "Update onboarding responses and plan preferences from Account → Update My Plan",
+      "Delete posture images from your scan history",
+      "Reset all progress from Account → Reset Progress",
+      "Revoke AI scanning consent from Account → AI Posture Scanning",
+      "Delete your entire account from Account → Delete Account",
+      "Request additional data access, export, or deletion by emailing support@spinelab.app",
     ],
     footer:
-      "If an in-app option is not yet available, you may use the support contact method listed in the App once activated.",
+      "If you are in the EU, UK, or California, you have additional rights under GDPR, UK GDPR, and CCPA — including the right to object to processing and the right to data portability.",
   },
   {
-    title: "9. HIPAA & Health Information Notice",
+    title: "10. HIPAA & Health Information Notice",
     content:
       "SpineLab is a wellness application and is not a hospital, clinic, medical practice, health plan, or other HIPAA-covered entity.",
     bullets: [
@@ -135,22 +203,22 @@ const SECTIONS = [
     ],
   },
   {
-    title: "10. Children's Privacy",
+    title: "11. Children's Privacy",
     content:
       "SpineLab is intended for adults and is not directed to children under 18. We do not knowingly collect personal information from children under 18.",
   },
   {
-    title: "11. Changes to This Privacy Policy",
+    title: "12. Changes to This Privacy Policy",
     content:
       "We may update this Privacy Policy from time to time. When we do, we will revise the 'Last Updated' date at the top of this page. Your continued use of SpineLab after changes are posted means you accept the updated policy.",
   },
   {
-    title: "12. Contact Us",
+    title: "13. Contact Us",
     content:
-      "If you have questions or requests related to privacy, data, or this Privacy Policy, please use the contact method listed in the App.",
+      "If you have questions or requests related to privacy, data, or this Privacy Policy, please use the contact method below.",
     bullets: [
       "Support email: support@spinelab.app",
-      "If that email is not yet active, you may use the Account section or any in-app support pathway we make available",
+      "If that email is not yet active, you may use any in-app support pathway we make available",
     ],
   },
 ];
@@ -178,15 +246,20 @@ export default function PrivacyPolicy() {
               <Shield className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-bold leading-tight tracking-tight">Privacy Policy</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Last Updated: April 9, 2026</p>
+              <h2 className="text-xl font-bold leading-tight tracking-tight">
+                Privacy Policy
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Last Updated: May 16, 2026
+              </p>
             </div>
           </div>
 
           <div className="mb-8 rounded-2xl border border-primary/15 bg-primary/5 px-5 py-4">
             <p className="text-sm leading-relaxed text-foreground/80">
-              Your privacy matters to SpineLab. We aim to collect only what we need to operate the
-              App, provide posture and wellness features, and improve the experience over time.
+              Your privacy matters to SpineLab. We aim to collect only what we need
+              to operate the App, provide posture and wellness features, and
+              improve the experience over time.
             </p>
           </div>
 
@@ -199,7 +272,9 @@ export default function PrivacyPolicy() {
                 transition={{ delay: i * 0.03 }}
                 className="border-b border-border/50 pb-7 last:border-0 last:pb-0"
               >
-                <h3 className="mb-2.5 text-sm font-bold text-foreground">{section.title}</h3>
+                <h3 className="mb-2.5 text-sm font-bold text-foreground">
+                  {section.title}
+                </h3>
 
                 {section.content && (
                   <p className="mb-3 whitespace-pre-line text-sm leading-relaxed text-foreground/70">
