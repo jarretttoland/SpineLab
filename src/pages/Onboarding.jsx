@@ -33,6 +33,9 @@ import {
   FileText,
   Camera,
   Check,
+  RotateCcw,
+  Ruler,
+  Sun,
 } from "lucide-react";
 
 const PAIN_AREA_OPTIONS = [
@@ -413,28 +416,71 @@ function IntroStep({ onStart, onPrivacy, onTerms }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SCAN OPTION STEP — refactored to match IntroStep pattern
+// SCAN OPTION STEP — combined pitch + silhouette + instructions
 // ─────────────────────────────────────────────────────────────
 
-function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
+function MiniSilhouette() {
   return (
-    <div className="min-h-screen px-6 pt-14 pb-10 flex flex-col">
+    <svg
+      viewBox="0 0 160 280"
+      className="w-full h-full"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* head */}
+      <ellipse cx="86" cy="28" rx="16" ry="19" fill="currentColor" opacity="0.16" />
+      {/* neck */}
+      <path d="M82 46 Q80 56 79 64" stroke="currentColor" strokeWidth="8" strokeLinecap="round" fill="none" opacity="0.16" />
+      {/* torso */}
+      <path d="M72 64 Q65 100 67 135 Q69 156 80 168"
+        stroke="currentColor" strokeWidth="22" strokeLinecap="round" fill="none" opacity="0.14" />
+      {/* arm */}
+      <path d="M69 76 Q62 108 63 135"
+        stroke="currentColor" strokeWidth="9" strokeLinecap="round" fill="none" opacity="0.11" />
+      {/* hip */}
+      <ellipse cx="78" cy="170" rx="14" ry="10" fill="currentColor" opacity="0.14" />
+      {/* upper leg */}
+      <path d="M78 178 Q78 208 79 234"
+        stroke="currentColor" strokeWidth="16" strokeLinecap="round" fill="none" opacity="0.14" />
+      {/* lower leg */}
+      <path d="M79 234 Q80 256 81 262"
+        stroke="currentColor" strokeWidth="12" strokeLinecap="round" fill="none" opacity="0.13" />
+
+      {/* plumb line */}
+      <line x1="80" y1="10" x2="80" y2="270"
+        stroke="currentColor" strokeWidth="1" strokeDasharray="4,4" opacity="0.22" />
+
+      {/* landmark dots */}
+      <circle cx="86" cy="46" r="5" fill="#3b82f6" />
+      <circle cx="86" cy="46" r="9" fill="#3b82f6" opacity="0.18" />
+      <circle cx="80" cy="90" r="5" fill="#8b5cf6" />
+      <circle cx="80" cy="90" r="9" fill="#8b5cf6" opacity="0.18" />
+      <circle cx="78" cy="172" r="5" fill="#10b981" />
+      <circle cx="78" cy="172" r="9" fill="#10b981" opacity="0.18" />
+    </svg>
+  );
+}
+
+function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
+  const TIPS = [
+    { icon: RotateCcw, text: "Stand sideways" },
+    { icon: Ruler, text: "8–12 ft from camera" },
+    { icon: Sun, text: "Good light, plain wall" },
+  ];
+
+  return (
+    <div className="min-h-screen px-6 pt-12 pb-10 flex flex-col">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         className="max-w-lg mx-auto w-full flex-1 flex flex-col"
       >
         {/* Header */}
-        <div className="mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-5">
-            <Camera className="w-6 h-6 text-primary" />
-          </div>
-
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary mb-3">
+        <div className="mb-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary mb-2">
             Optional · about 30 seconds
           </p>
 
-          <h1 className="text-3xl font-bold tracking-tight leading-tight mb-3">
+          <h1 className="text-[28px] font-bold tracking-tight leading-tight mb-2">
             Get your real Spine Score
           </h1>
 
@@ -444,35 +490,66 @@ function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
           </p>
         </div>
 
-        {/* Benefits card with Recommended badge */}
-        <div className="rounded-3xl border border-border bg-card p-5 mb-4">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold">What the scan adds</p>
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary bg-primary/10 px-2.5 py-1 rounded-full">
-              Recommended
-            </span>
+        {/* Hero card — silhouette + benefits side-by-side */}
+        <div className="relative rounded-3xl border border-border bg-gradient-to-b from-primary/[0.04] to-card p-5 mb-4 overflow-hidden">
+          <span className="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-[0.14em] text-primary bg-primary/10 px-2.5 py-1 rounded-full">
+            Recommended
+          </span>
+
+          <div className="flex items-center gap-4">
+            {/* Silhouette */}
+            <div
+              className="text-foreground shrink-0"
+              style={{ height: 180, width: 92 }}
+              aria-hidden="true"
+            >
+              <MiniSilhouette />
+            </div>
+
+            {/* Benefits */}
+            <div className="flex-1 space-y-2.5 pt-7">
+              {[
+                "Measured score, not an estimate",
+                "Real Spine Score from day one",
+                "Accurate baseline for progress",
+              ].map((line) => (
+                <div key={line} className="flex items-start gap-2.5">
+                  <div className="w-4 h-4 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+                    <Check className="w-2.5 h-2.5 text-primary" strokeWidth={3.5} />
+                  </div>
+                  <p className="text-[13px] font-medium text-foreground/85 leading-snug">
+                    {line}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="space-y-3">
-            {[
-              "A measured posture score — not just an estimate",
-              "Your real Spine Score from day one",
-              "An accurate baseline to track progress against",
-            ].map((line) => (
-              <div key={line} className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <Check className="w-3 h-3 text-primary" strokeWidth={3} />
+          {/* Quick how-to chips */}
+          <div className="mt-5 pt-4 border-t border-border/70">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground mb-2.5">
+              How it works
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {TIPS.map(({ icon: Icon, text }) => (
+                <div
+                  key={text}
+                  className="flex flex-col items-center text-center gap-1.5 px-2 py-3 rounded-2xl bg-background/70 border border-border/60"
+                >
+                  <div className="w-7 h-7 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Icon className="w-3.5 h-3.5 text-primary" />
+                  </div>
+                  <p className="text-[11px] font-medium text-foreground/80 leading-tight">
+                    {text}
+                  </p>
                 </div>
-                <p className="text-sm font-medium text-foreground/85 leading-snug">
-                  {line}
-                </p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Privacy reassurance */}
-        <div className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-secondary/50 mb-8">
+        <div className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-secondary/50 mb-6">
           <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
           <p className="text-xs text-muted-foreground leading-relaxed">
             Your photo is used only for analysis. Delete anytime from your account.
@@ -484,8 +561,9 @@ function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
           <Button
             onClick={onScanNow}
             disabled={saving}
-            className="w-full h-14 rounded-2xl text-base font-semibold"
+            className="w-full h-14 rounded-2xl text-base font-semibold gap-2"
           >
+            <Camera className="w-4 h-4" />
             {saving ? "Saving…" : "Start posture scan"}
           </Button>
 

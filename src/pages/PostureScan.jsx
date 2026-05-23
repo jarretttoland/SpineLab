@@ -66,7 +66,18 @@ export default function PostureScan() {
         if (!mountedRef.current) return;
         setProfile(profileData);
         setPreviousScans(scans);
-        setPhase("guide");
+
+        // During onboarding, the user just came from the combined
+        // pitch + instructions screen (ScanOptionStep), so skip the
+        // separate "guide" page and go straight into consent (if
+        // required) or the camera.
+        const needsConsentNow = profileData && !profileData.ai_consent_at;
+
+        if (isOnboardingFlow) {
+          setPhase(needsConsentNow ? "consent" : "capture");
+        } else {
+          setPhase("guide");
+        }
       } catch (err) {
         console.error("[PostureScan] boot error:", err);
         if (!mountedRef.current) return;
@@ -75,7 +86,7 @@ export default function PostureScan() {
     }
 
     load();
-  }, []);
+  }, [isOnboardingFlow]);
 
   // ───────────────────────────────────────────────────────────
   // AI consent (Apple 5.1.1 / 5.1.2)
@@ -104,7 +115,11 @@ export default function PostureScan() {
   };
 
   const handleConsentDecline = () => {
-    setPhase("guide");
+    if (isOnboardingFlow) {
+      navigate("/onboarding", { replace: true });
+    } else {
+      setPhase("guide");
+    }
   };
 
   const handleImageAccepted = async (imageUrl, keyLandmarks, imagePath = null) => {
@@ -294,7 +309,7 @@ export default function PostureScan() {
     setScanData(null);
     setDetectionFailed(false);
     setSaveError(null);
-    setPhase("guide");
+    setPhase(isOnboardingFlow ? "capture" : "guide");
   };
 
   const handleRetake = () => {
@@ -362,7 +377,13 @@ export default function PostureScan() {
     return (
       <CaptureScreen
         onAccepted={handleImageAccepted}
-        onBack={() => setPhase("guide")}
+        onBack={() => {
+          if (isOnboardingFlow) {
+            navigate("/onboarding", { replace: true });
+          } else {
+            setPhase("guide");
+          }
+        }}
         userId={user?.id}
       />
     );

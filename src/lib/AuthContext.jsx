@@ -1,5 +1,18 @@
+// FILE: src/lib/AuthContext.jsx
+// Replace your existing file with this entire file.
+//
+// What's new in this version: native deep-link handling for OAuth.
+// When Apple/Google finishes sign-in, Supabase redirects to
+// app.spinelab.mobile://login-callback?code=... — Capacitor's
+// `appUrlOpen` event fires, we close the in-app browser, and
+// exchange the code for a Supabase session. onAuthStateChange then
+// flips isAuthenticated to true and routes the user.
+
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { Capacitor } from "@capacitor/core";
+import { App as CapApp } from "@capacitor/app";
+import { Browser } from "@capacitor/browser";
 
 const AuthContext = createContext(null);
 
@@ -107,6 +120,116 @@ export const AuthProvider = ({ children }) => {
     return () => {
       mounted = false;
       subscription?.unsubscribe?.();
+    };
+  }, []);
+
+  // ───────────────────────────────────────────────────────────────
+  // Native OAuth deep-link handler
+  // ───────────────────────────────────────────────────────────────
+  // After Apple/Google sign-in, Supabase redirects the SFSafariViewController
+  // to app.spinelab.mobile://login-callback?code=XXX. iOS routes that URL
+  // back into our app via the appUrlOpen event. We:
+  //   1. Close the in-app browser
+  //   2. Parse the OAuth `code` out of the URL
+  //   3. Call supabase.auth.exchangeCodeForSession(code) — this completes
+  //      the PKCE handshake and writes a session into local storage
+  // onAuthStateChange then fires and flips isAuthenticated to true.
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let listenerHandle = null;
+    let cancelled = false;
+
+    (async () => {
+      const handle = await CapApp.addListener("appUrlOpen", async (event) => {
+        try {
+          const incomingUrl = event?.url || "";
+
+          // Only handle our own callback URL
+          if (!incomingUrl.startsWith("app.spinelab.mobile://login-callback")) {
+            return;
+          }
+
+          // Try to close Safari View Controller as quickly as possible.
+          try {
+            await Browser.close();
+          } catch (_e) {
+            // Browser may already be closed — not fatal.
+          }
+
+          // Parse the code or error from the URL. Apple/Google return
+          // ?code=XXX&state=YYY on success or ?error=... on failure.
+          // Some providers put the code in the URL fragment (#) — handle both.
+          const parsed = new URL(incomingUrl);
+          const params = new URLSearchParams(parsed.search);
+
+          // Fallback to hash params if needed
+          if (!params.get("code") && parsed.hash) {
+            const hash = parsed.hash.startsWith("#")
+              ? parsed.hash.slice(1)
+              : parsed.hash;
+            const hashParams = new URLSearchParams(hash);
+            hashParams.forEach((v, k) => {
+              if (!params.has(k)) params.set(k, v);
+            });
+          }
+
+          const errorDescription =
+            params.get("error_description") || params.get("error");
+
+          if (errorDescription) {
+            console.error("[AuthContext] OAuth callback error:", errorDescription);
+            return;
+          }
+
+          const code = params.get("code");
+
+          if (code) {
+            const { error } = await supabase.auth.exchangeCodeForSession(code);
+            if (error) {
+              console.error(
+                "[AuthContext] exchangeCodeForSession error:",
+                error.message
+              );
+            }
+            // onAuthStateChange will pick up the new session and update
+            // isAuthenticated, which causes ProtectedAppRoutes to render
+            // the post-login app.
+            return;
+          }
+
+          // Some token-flow providers return access_token / refresh_token
+          // directly. Handle that as a fallback.
+          const accessToken = params.get("access_token");
+          const refreshToken = params.get("refresh_token");
+          if (accessToken && refreshToken) {
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (error) {
+              console.error(
+                "[AuthContext] setSession from token error:",
+                error.message
+              );
+            }
+          }
+        } catch (err) {
+          console.error("[AuthContext] appUrlOpen handler error:", err);
+        }
+      });
+
+      if (cancelled) {
+        handle.remove();
+      } else {
+        listenerHandle = handle;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      listenerHandle?.remove?.();
     };
   }, []);
 

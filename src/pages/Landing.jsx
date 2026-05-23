@@ -1,10 +1,26 @@
+// FILE: src/pages/Landing.jsx
+// Replace your existing file with this entire file.
+//
+// What changed from the previous version:
+//   - Removed the @capacitor-community/apple-sign-in import (that package
+//     is stuck on Capacitor 7, incompatible with our Capacitor 8 project)
+//   - Apple Sign-In now uses Supabase's built-in OAuth flow on ALL platforms.
+//     The button opens Apple's sign-in inside the WKWebView and Supabase
+//     handles the callback. Satisfies Apple guideline 4.8.
+//
+// You should ALSO run, once, in your terminal:
+//   npm uninstall @capacitor-community/apple-sign-in
+//   npx cap sync ios
+
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { supabase } from "@/lib/supabase";
+import { supabase, NATIVE_OAUTH_REDIRECT } from "@/lib/supabase";
 import { ArrowRight, ShieldCheck, TrendingUp, Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 
 const SpineIcon = () => (
   <svg
@@ -25,24 +41,18 @@ const SpineIcon = () => (
   </svg>
 );
 
+const AppleIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="white" xmlns="http://www.w3.org/2000/svg">
+    <path d="M17.05 14.45c-.32.74-.69 1.42-1.13 2.05-.6.85-1.09 1.43-1.46 1.76-.58.53-1.21.8-1.87.81-.48 0-1.06-.14-1.73-.42-.68-.28-1.3-.42-1.86-.42-.59 0-1.23.14-1.91.42-.69.28-1.24.43-1.66.44-.64.03-1.27-.25-1.91-.84-.4-.36-.91-.97-1.53-1.83-.67-.93-1.21-2-1.64-3.22-.45-1.32-.68-2.59-.68-3.83 0-1.41.3-2.63.92-3.65a5.42 5.42 0 0 1 1.93-1.94 5.18 5.18 0 0 1 2.61-.73c.5 0 1.17.16 2 .47.84.31 1.37.47 1.61.47.18 0 .77-.18 1.78-.55.95-.34 1.76-.49 2.42-.43 1.8.15 3.15.86 4.04 2.15-1.61.98-2.41 2.36-2.4 4.12.01 1.37.51 2.51 1.49 3.41.44.42.94.74 1.49.97-.12.34-.25.67-.39.99zM13.39 1.1c0 1.05-.39 2.04-1.16 2.95-.93 1.08-2.05 1.7-3.27 1.6a3.16 3.16 0 0 1-.02-.4c0-1.01.44-2.09 1.23-2.97.39-.45.89-.82 1.5-1.12.6-.29 1.18-.45 1.72-.48.01.14.02.28.02.42z" />
+  </svg>
+);
+
 const GoogleIcon = () => (
   <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-    <path
-      d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.79h5.4a4.61 4.61 0 0 1-2 3.02v2.5h3.24c1.9-1.75 3-4.33 3-7.31z"
-      fill="#4285F4"
-    />
-    <path
-      d="M10 20c2.7 0 4.97-.9 6.62-2.46l-3.24-2.5a6.03 6.03 0 0 1-8.94-3.17H1.08v2.58A10 10 0 0 0 10 20z"
-      fill="#34A853"
-    />
-    <path
-      d="M4.44 11.87A6.03 6.03 0 0 1 4.44 8.13V5.55H1.08a10 10 0 0 0 0 8.9l3.36-2.58z"
-      fill="#FBBC05"
-    />
-    <path
-      d="M10 3.96a5.44 5.44 0 0 1 3.84 1.5l2.87-2.87A9.65 9.65 0 0 0 10 0 10 10 0 0 0 1.08 5.55l3.36 2.58A5.96 5.96 0 0 1 10 3.96z"
-      fill="#EA4335"
-    />
+    <path d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.79h5.4a4.61 4.61 0 0 1-2 3.02v2.5h3.24c1.9-1.75 3-4.33 3-7.31z" fill="#4285F4" />
+    <path d="M10 20c2.7 0 4.97-.9 6.62-2.46l-3.24-2.5a6.03 6.03 0 0 1-8.94-3.17H1.08v2.58A10 10 0 0 0 10 20z" fill="#34A853" />
+    <path d="M4.44 11.87A6.03 6.03 0 0 1 4.44 8.13V5.55H1.08a10 10 0 0 0 0 8.9l3.36-2.58z" fill="#FBBC05" />
+    <path d="M10 3.96a5.44 5.44 0 0 1 3.84 1.5l2.87-2.87A9.65 9.65 0 0 0 10 0 10 10 0 0 0 1.08 5.55l3.36 2.58A5.96 5.96 0 0 1 10 3.96z" fill="#EA4335" />
   </svg>
 );
 
@@ -109,24 +119,66 @@ export default function Landing() {
   const [emailMode, setEmailMode] = useState("login");
   const [loadingGuest, setLoadingGuest] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [loadingApple, setLoadingApple] = useState(false);
   const { startGuestSession } = useAuth();
   const navigate = useNavigate();
+
+  // Shared helper: kicks off an OAuth flow and routes based on platform.
+  //  - Web → normal redirect inside the same tab
+  //  - Native (Capacitor) → opens Safari View Controller via @capacitor/browser,
+  //    Apple redirects back to our custom URL scheme, and AuthContext's
+  //    deep-link listener exchanges the code for a session.
+  const startOAuth = async (provider) => {
+    const isNative = Capacitor.isNativePlatform();
+    const redirectTo = isNative
+      ? NATIVE_OAUTH_REDIRECT
+      : `${window.location.origin}/`;
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo,
+        skipBrowserRedirect: isNative,
+      },
+    });
+
+    if (error) throw error;
+
+    if (isNative) {
+      if (!data?.url) {
+        throw new Error("Could not get OAuth URL from Supabase.");
+      }
+      // Open Apple/Google sign-in in Safari. After the user authenticates,
+      // Apple/Google → Supabase → redirects to NATIVE_OAUTH_REDIRECT which
+      // re-opens our app and fires AuthContext's appUrlOpen handler.
+      await Browser.open({
+        url: data.url,
+        windowName: "_self",
+        presentationStyle: "fullscreen",
+      });
+    }
+    // On web, signInWithOAuth navigates away on its own.
+  };
+
+  const handleApple = async () => {
+    try {
+      setLoadingApple(true);
+      await startOAuth("apple");
+    } catch (err) {
+      console.error("Apple sign in error:", err);
+      alert(err?.message || "Could not sign in with Apple. Please try again.");
+    } finally {
+      setLoadingApple(false);
+    }
+  };
 
   const handleGoogle = async () => {
     try {
       setLoadingGoogle(true);
-
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/`,
-        },
-      });
-
-      if (error) throw error;
+      await startOAuth("google");
     } catch (err) {
-      console.error("Google sign in error:", err.message);
-      alert(err.message);
+      console.error("Google sign in error:", err?.message || err);
+      alert(err?.message || "Could not sign in with Google. Please try again.");
     } finally {
       setLoadingGoogle(false);
     }
@@ -193,8 +245,21 @@ export default function Landing() {
           className="px-6 pb-14 space-y-3"
         >
           <button
+            onClick={handleApple}
+            disabled={loadingApple || loadingGoogle}
+            className="w-full h-14 rounded-2xl text-base font-semibold bg-black hover:bg-zinc-800 text-white transition-colors flex items-center justify-center gap-3 disabled:opacity-60"
+          >
+            <AppleIcon />
+            {loadingApple
+              ? "Loading..."
+              : isSignup
+              ? "Sign up with Apple"
+              : "Continue with Apple"}
+          </button>
+
+          <button
             onClick={handleGoogle}
-            disabled={loadingGoogle}
+            disabled={loadingGoogle || loadingApple}
             className="w-full h-14 rounded-2xl text-base font-semibold border border-border bg-card hover:bg-secondary transition-colors flex items-center justify-center gap-3 disabled:opacity-60"
           >
             <GoogleIcon />
