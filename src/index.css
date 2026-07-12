@@ -101,6 +101,52 @@
     --sidebar-border: 220 13% 15%;
     --sidebar-ring: 217 91% 60%;
   }
+
+  /* ── Gold theme ───────────────────────────────────────────── */
+  .gold {
+    --background: 40 30% 97%;
+    --foreground: 35 20% 8%;
+
+    --card: 38 25% 99%;
+    --card-foreground: 35 20% 8%;
+
+    --popover: 38 25% 99%;
+    --popover-foreground: 35 20% 8%;
+
+    --primary: 38 92% 48%;
+    --primary-foreground: 35 20% 8%;
+
+    --secondary: 38 18% 92%;
+    --secondary-foreground: 35 15% 15%;
+
+    --muted: 38 18% 92%;
+    --muted-foreground: 35 10% 44%;
+
+    --accent: 38 92% 48%;
+    --accent-foreground: 35 20% 8%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 38 22% 86%;
+    --input: 38 22% 86%;
+    --ring: 38 92% 48%;
+
+    --chart-1: 38 92% 48%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    --sidebar-background: 40 30% 97%;
+    --sidebar-foreground: 35 20% 8%;
+    --sidebar-primary: 38 92% 48%;
+    --sidebar-primary-foreground: 35 20% 8%;
+    --sidebar-accent: 38 18% 92%;
+    --sidebar-accent-foreground: 35 15% 15%;
+    --sidebar-border: 38 22% 86%;
+    --sidebar-ring: 38 92% 48%;
+  }
 }
 
 @layer base {
@@ -111,9 +157,11 @@
 
   html {
     width: 100%;
-    min-height: 100%;
+    /* Fixed at viewport height so the document itself never scrolls.
+       Each page's own scroll container handles content overflow. */
+    height: 100dvh;
+    overflow: hidden;
     background: hsl(var(--background));
-    overflow-x: hidden;
     -webkit-text-size-adjust: 100%;
   }
 
@@ -121,11 +169,11 @@
     @apply bg-background text-foreground font-inter;
 
     width: 100%;
-    min-height: 100dvh;
+    height: 100dvh;
     margin: 0;
     padding: 0;
 
-    overflow-x: hidden;
+    overflow: hidden;
 
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -157,14 +205,19 @@
 
   #root {
     width: 100%;
-    min-height: 100dvh;
-    overflow-x: hidden;
+    height: 100dvh;
+    overflow: hidden;
   }
 
-  /* MAIN APP POSITIONING — owns safe-area for the whole app */
+  /* MAIN APP POSITIONING — the single scroll container for the whole app.
+     html/body/root are overflow:hidden so the document never scrolls.
+     app-shell is overflow-y:auto so every page scrolls through here.
+     Landing page content fills it exactly (flex-1 child) — no overflow,
+     no scroll. Content-heavy pages (Dashboard, Routine, etc.) overflow
+     naturally and scroll through this container. */
   .app-shell {
     width: 100%;
-    min-height: 100dvh;
+    height: 100dvh;
 
     padding-top: calc(env(safe-area-inset-top) + 14px);
     padding-bottom: env(safe-area-inset-bottom);
@@ -172,10 +225,12 @@
     padding-right: env(safe-area-inset-right);
 
     overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: none; /* no rubber-band bounce at top/bottom */
 
     background: hsl(var(--background));
 
-    /* So child <Screen> can flex-1 inside this */
+    /* So child pages can flex-1 inside this */
     display: flex;
     flex-direction: column;
   }

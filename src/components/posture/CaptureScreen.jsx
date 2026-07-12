@@ -26,10 +26,36 @@ import {
 } from "lucide-react";
 import { uploadPostureScanImage } from "@/lib/postureScanSupabase";
 import * as MediaPipeLib from "@/lib/mediapipe";
+import { hapticSuccess, hapticLight } from "@/lib/haptics";
+
+// ───────────────────────────────────────────────────────────
+// Capacitor helpers
+// ───────────────────────────────────────────────────────────
+
+/** True when running inside the Capacitor iOS/Android shell. */
+function isNative() {
+  return !!(window.Capacitor && window.Capacitor.isNativePlatform?.());
+}
+
+/** Lazy import of @capacitor-community/camera-preview. */
+async function getCameraPreview() {
+  const mod = await import("@capacitor-community/camera-preview");
+  return mod.CameraPreview;
+}
+
+/** Convert a base64 JPEG string (no data-URL prefix) to a File. */
+function base64ToFile(b64, filename = "posture-capture.jpg") {
+  const byteChars = atob(b64);
+  const bytes = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+  return new File([bytes], filename, { type: "image/jpeg" });
+}
 
 const COUNTDOWN_SECONDS = 5;
-const EVAL_INTERVAL_MS = 200;
-const READY_STABILITY_FRAMES = 3;
+const EVAL_INTERVAL_MS  = 200;
+const NATIVE_EVAL_MS    = 300; // native bridge has some latency
+const NATIVE_STABILITY  = 5;   // ~1.5 s of stable pose before countdown fires
+const READY_STABILITY_FRAMES = 7; // ~1.4 s at 200 ms intervals before countdown fires
 
 // ───────────────────────────────────────────────────────────
 // Helpers
@@ -46,54 +72,32 @@ function objectContainLayout(natW, natH, boxW, boxH) {
 
 function evaluateReadiness(lm) {
   if (!lm || lm.length < 25) {
-    return { state: "no_person", hint: "Step into the frame" };
+    return { state: "no_person", hint: "Step into frame — show your full side profile" };
   }
 
   const vis = (pt) => pt?.visibility ?? 0;
-  const best = (a, b) => (vis(a) >= vis(b) ? a : b);
 
-  const leftEar = lm[7];
-  const rightEar = lm[8];
-  const leftSho = lm[11];
-  const rightSho = lm[12];
-  const leftHip = lm[23];
-  const rightHip = lm[24];
+  // Use the best-visible side for each joint
+  const sho = Math.max(vis(lm[11]), vis(lm[12]));
+  const hip = Math.max(vis(lm[23]), vis(lm[24]));
+  const ear = Math.max(vis(lm[7]),  vis(lm[8]));
 
-  const ear = best(leftEar, rightEar);
-  const sho = best(leftSho, rightSho);
-  const hip = best(leftHip, rightHip);
-
-  if (vis(sho) < 0.3 || vis(hip) < 0.3) {
-    return { state: "no_person", hint: "Step into the frame" };
+  // Meaningful detection threshold — avoids false positives from background objects
+  if (sho < 0.35 || hip < 0.35) {
+    return { state: "no_person", hint: "Step into frame — show your full side profile" };
   }
 
-  if (vis(ear) < 0.25) {
-    return { state: "detected", hint: "Turn your head so it's visible" };
+  // Body is partially visible but not yet well-positioned
+  if (sho < 0.55 || hip < 0.55) {
+    return { state: "detected", hint: "Good — back up a little so your full body is visible" };
   }
 
-  const torsoHeight = Math.abs(hip.y - sho.y);
-
-  if (torsoHeight < 0.1) {
-    return { state: "almost", hint: "Take a step closer" };
-  }
-  if (torsoHeight > 0.45) {
-    return { state: "almost", hint: "Take a step back" };
+  // Body looks good but ear not yet visible
+  if (ear < 0.25) {
+    return { state: "almost", hint: "Almost there — turn slightly so your ear is visible" };
   }
 
-  const shoulderSep =
-    vis(leftSho) >= 0.2 && vis(rightSho) >= 0.2
-      ? Math.abs(leftSho.x - rightSho.x)
-      : 0;
-
-  if (shoulderSep > 0.35) {
-    return { state: "almost", hint: "Turn so your side faces the camera" };
-  }
-
-  const midX = (sho.x + hip.x) / 2;
-  if (midX < 0.15) return { state: "almost", hint: "Step to your right" };
-  if (midX > 0.85) return { state: "almost", hint: "Step to your left" };
-
-  return { state: "ready", hint: "Hold still — capturing in a moment" };
+  return { state: "ready", hint: "Perfect — hold still" };
 }
 
 // ───────────────────────────────────────────────────────────
@@ -171,6 +175,98 @@ function CountdownDisplay({ seconds }) {
       >
         <span className="text-6xl font-black text-emerald-400">{seconds}</span>
       </motion.div>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────
+// Premium native-camera overlays
+// ───────────────────────────────────────────────────────────
+
+/** Four corner L-brackets that glow green when the pose is ready. */
+function CornerBrackets({ readinessState }) {
+  const isReady  = readinessState === "ready";
+  const isAlmost = readinessState === "almost";
+  const color  = isReady  ? "#34d399" : isAlmost ? "#fbbf24" : "rgba(255,255,255,0.72)";
+  const glow   = isReady  ? "0 0 14px #34d39988, 0 0 4px #34d399cc" : "none";
+  const ARM = 38, THICK = 3.5, PAD = 28;
+
+  const lineBase = {
+    position: "absolute",
+    background: color,
+    boxShadow: glow,
+    borderRadius: THICK,
+    transition: "background 0.35s ease, box-shadow 0.35s ease",
+  };
+
+  const corners = [
+    // [ container, h-arm, v-arm ]
+    [{ top: PAD, left: PAD },     { top: 0, left: 0, width: ARM, height: THICK }, { top: 0, left: 0, width: THICK, height: ARM }],
+    [{ top: PAD, right: PAD },    { top: 0, right: 0, width: ARM, height: THICK }, { top: 0, right: 0, width: THICK, height: ARM }],
+    [{ bottom: PAD, left: PAD },  { bottom: 0, left: 0, width: ARM, height: THICK }, { bottom: 0, left: 0, width: THICK, height: ARM }],
+    [{ bottom: PAD, right: PAD }, { bottom: 0, right: 0, width: ARM, height: THICK }, { bottom: 0, right: 0, width: THICK, height: ARM }],
+  ];
+
+  return (
+    <div className="absolute inset-0 pointer-events-none">
+      {corners.map(([cPos, hPos, vPos], i) => (
+        <div key={i} style={{ position: "absolute", width: ARM, height: ARM, ...cPos }}>
+          <div style={{ ...lineBase, ...hPos }} />
+          <div style={{ ...lineBase, ...vPos }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** SVG ring countdown with animated arc + large centered number. */
+function CountdownRing({ seconds, total = COUNTDOWN_SECONDS }) {
+  const R            = 68;
+  const circumference = 2 * Math.PI * R;
+  const dashOffset    = circumference * (1 - seconds / total);
+
+  return (
+    <div style={{ position: "relative", width: 176, height: 176 }}>
+      {/* Ring SVG */}
+      <svg
+        width="176"
+        height="176"
+        style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)" }}
+      >
+        <circle cx="88" cy="88" r={R} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="5" />
+        <motion.circle
+          cx="88" cy="88" r={R}
+          fill="none"
+          stroke="#34d399"
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          animate={{ strokeDashoffset: dashOffset }}
+          transition={{ duration: 0.9, ease: "easeInOut" }}
+          style={{ filter: "drop-shadow(0 0 9px #34d399aa)" }}
+        />
+      </svg>
+      {/* Number */}
+      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={seconds}
+            initial={{ scale: 1.45, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.6, opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            style={{
+              fontSize: 68,
+              fontWeight: 900,
+              color: "white",
+              lineHeight: 1,
+              textShadow: "0 2px 24px rgba(0,0,0,0.55)",
+            }}
+          >
+            {seconds}
+          </motion.span>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -385,7 +481,7 @@ function ReviewStep({
       <div className="px-6 pt-4 pb-4 space-y-3 flex-shrink-0">
         {qualityResult?.pass ? (
           <Button
-            onClick={onAccept}
+            onClick={() => { hapticSuccess(); onAccept(); }}
             disabled={uploading}
             className="w-full h-14 rounded-2xl text-base font-semibold gap-2"
           >
@@ -440,16 +536,27 @@ const PROCESS_STAGES = [
   { key: "analyze", label: "Preparing your results…" },
 ];
 
-function ProcessingView({ stage }) {
-  const idx = Math.max(0, PROCESS_STAGES.findIndex((s) => s.key === stage));
-  const label = PROCESS_STAGES[idx]?.label ?? "Preparing your results…";
-  const progress = ((idx + 1) / PROCESS_STAGES.length) * 100;
+// Shown after the user taps "Looks Good — Continue", while the parent
+// (PostureScan.handleImageAccepted) uploads the photo, runs the AI summary,
+// and saves the scan. Keeping the user on a live progress screen here — instead
+// of letting the Review button's spinner clear and going idle — is what
+// removes the "dead" gap before results appear.
+const SAVE_STAGES = [
+  { key: "upload", label: "Uploading your photo…" },
+  { key: "analyze", label: "Analyzing your posture…" },
+  { key: "save", label: "Saving your results…" },
+];
+
+function ProcessingView({ stage, stages = PROCESS_STAGES, title = "Analyzing your posture" }) {
+  const idx = Math.max(0, stages.findIndex((s) => s.key === stage));
+  const label = stages[idx]?.label ?? "Preparing your results…";
+  const progress = ((idx + 1) / stages.length) * 100;
 
   return (
     <div className="min-h-[100dvh] flex flex-col items-center justify-center px-6 gap-5 bg-background">
       <Loader2 className="w-10 h-10 text-primary animate-spin" />
       <div className="text-center">
-        <p className="font-bold text-lg mb-1">Analyzing your posture</p>
+        <p className="font-bold text-lg mb-1">{title}</p>
         <p className="text-sm text-muted-foreground">{label}</p>
       </div>
       <div className="w-48 h-1 bg-secondary rounded-full overflow-hidden">
@@ -458,6 +565,401 @@ function ProcessingView({ stage }) {
           style={{ width: `${progress}%` }}
         />
       </div>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────
+// Native camera capture — Snapchat-style live preview
+//
+// Uses @capacitor-community/camera-preview with toBack:true so the
+// native camera renders BEHIND the transparent WebView. We overlay a
+// premium pose-detection UI on top. Once ear + shoulder + hip are
+// detected for NATIVE_STABILITY consecutive frames the 5-second
+// countdown fires automatically and the final photo is captured.
+//
+// Front camera opens first. Camera flip available at any time.
+// No distance constraints — works at 5–12 ft.
+// ───────────────────────────────────────────────────────────
+
+function NativeCameraCapture({ onFileReady, onBack }) {
+  // phase: "starting" | "live" | "countdown" | "capturing" | "error"
+  const [phase, setPhase]               = useState("starting");
+  const [readinessState, setReadinessState] = useState("no_person");
+  const [hint, setHint]                 = useState("Stand sideways — show your side profile");
+  const [countdown, setCountdown]       = useState(null);
+  const [errorMsg, setErrorMsg]         = useState(null);
+  // If the native camera-preview bridge times out, fall back to getUserMedia
+  const [useFallback, setUseFallback]   = useState(false);
+
+  const mountedRef         = useRef(true);
+  const evalTimerRef       = useRef(null);
+  const cdIntervalRef      = useRef(null);
+  const countdownActiveRef = useRef(false);
+  const stableFramesRef    = useRef(0);
+  const evalBusyRef        = useRef(false);
+  const cpRef              = useRef(null);
+  const facingRef          = useRef("front");
+
+  // ── Make WebView background transparent so native camera shows through ──
+  useEffect(() => {
+    const targets = [
+      document.documentElement,
+      document.body,
+      document.getElementById("root"),
+      document.querySelector(".app-shell"),
+    ].filter(Boolean);
+
+    targets.forEach((el) => el.style.setProperty("background", "transparent", "important"));
+    return ()   => targets.forEach((el) => el.style.removeProperty("background"));
+  }, []);
+
+  // ── Restore backgrounds when falling back to web camera ──────────────
+  useEffect(() => {
+    if (!useFallback) return;
+    [
+      document.documentElement,
+      document.body,
+      document.getElementById("root"),
+      document.querySelector(".app-shell"),
+    ]
+      .filter(Boolean)
+      .forEach((el) => el.style.removeProperty("background"));
+  }, [useFallback]);
+
+  // ── Mount / unmount ──────────────────────────────────────────────────
+  useEffect(() => {
+    mountedRef.current = true;
+    launchPreview("front");
+    return () => {
+      mountedRef.current = false;
+      killPreview();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+  function killPreview() {
+    clearInterval(evalTimerRef.current);
+    clearInterval(cdIntervalRef.current);
+    const cp = cpRef.current;
+    if (cp) { cpRef.current = null; cp.stop().catch(() => {}); }
+  }
+
+  async function launchPreview(position) {
+    killPreview();
+    setPhase("starting");
+    setReadinessState("no_person");
+    setHint("Stand sideways — show your side profile");
+    setCountdown(null);
+    countdownActiveRef.current = false;
+    stableFramesRef.current    = 0;
+    evalBusyRef.current        = false;
+
+    try {
+      const CP = await getCameraPreview();
+      if (!mountedRef.current) return;
+
+      cpRef.current     = CP;
+      facingRef.current = position;
+
+      // Race CP.start() against an 8-second timeout.
+      // If the native bridge never responds (plugin not synced / no native
+      // handler registered), we fall back to the web getUserMedia camera
+      // rather than spinning forever.
+      await Promise.race([
+        CP.start({
+          position,
+          toBack:                       true,
+          enableOpacity:                true,
+          rotateWhenOrientationChanged: false,
+          width:  Math.round(window.screen.width),
+          height: Math.round(window.screen.height),
+        }),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("camera_preview_timeout")),
+            8000
+          )
+        ),
+      ]);
+
+      if (!mountedRef.current) { CP.stop().catch(() => {}); return; }
+
+      // Load MediaPipe while camera warms up
+      await MediaPipeLib.getLandmarker();
+      if (!mountedRef.current) { CP.stop().catch(() => {}); return; }
+
+      setPhase("live");
+      runEvalLoop(CP);
+    } catch (err) {
+      console.error("[NativeCamera] start error:", err);
+      if (!mountedRef.current) return;
+
+      if (err?.message === "camera_preview_timeout") {
+        // Native bridge hung — fall back to the web camera (getUserMedia).
+        // This always works in WKWebView on iOS 14.3+.
+        console.warn("[NativeCamera] bridge timeout — falling back to web camera");
+        cpRef.current = null;
+        setUseFallback(true);
+      } else {
+        setErrorMsg(
+          "Camera couldn't start. Open Settings → SpineLab → Camera, grant access, then tap Retry."
+        );
+        setPhase("error");
+      }
+    }
+  }
+
+  function runEvalLoop(CP) {
+    clearInterval(evalTimerRef.current);
+
+    evalTimerRef.current = setInterval(async () => {
+      if (!mountedRef.current || evalBusyRef.current) return;
+      evalBusyRef.current = true;
+
+      try {
+        const sample = await CP.captureSample({ quality: 40 });
+        if (!sample?.value || !mountedRef.current) return;
+
+        const imgEl  = await MediaPipeLib.loadImageElement(`data:image/jpeg;base64,${sample.value}`);
+        const result = await MediaPipeLib.detectPose(imgEl);
+        // detectPose may return array-of-arrays (multi-person) or a flat landmark array
+        const rawLm  = result?.landmarks;
+        const lm     = Array.isArray(rawLm?.[0]) ? rawLm[0] : (rawLm ?? null);
+        const ev     = evaluateReadiness(lm);
+
+        if (!mountedRef.current) return;
+
+        setReadinessState(ev.state);
+        setHint(ev.hint);
+
+        if (ev.state === "ready") {
+          stableFramesRef.current += 1;
+          if (stableFramesRef.current >= NATIVE_STABILITY && !countdownActiveRef.current) {
+            launchCountdown(CP);
+          }
+        } else {
+          stableFramesRef.current = 0;
+          if (countdownActiveRef.current) abortCountdown();
+        }
+      } catch (_) {
+        // transient frame error — ignore
+      } finally {
+        evalBusyRef.current = false;
+      }
+    }, NATIVE_EVAL_MS);
+  }
+
+  function launchCountdown(CP) {
+    if (countdownActiveRef.current) return;
+    countdownActiveRef.current = true;
+    setPhase("countdown");
+
+    let remaining = COUNTDOWN_SECONDS;
+    setCountdown(remaining);
+
+    hapticLight(); // first tick
+    cdIntervalRef.current = setInterval(() => {
+      if (!mountedRef.current) { clearInterval(cdIntervalRef.current); return; }
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(cdIntervalRef.current);
+        clearInterval(evalTimerRef.current); // stop sampling before final capture
+        setCountdown(null);
+        hapticSuccess(); // shutter moment
+        finalCapture(CP);
+      } else {
+        hapticLight(); // each tick
+        setCountdown(remaining);
+      }
+    }, 1000);
+  }
+
+  function abortCountdown() {
+    clearInterval(cdIntervalRef.current);
+    countdownActiveRef.current = false;
+    stableFramesRef.current    = 0;
+    setCountdown(null);
+    setPhase("live");
+  }
+
+  async function finalCapture(CP) {
+    setPhase("capturing");
+    try {
+      const photo = await CP.capture({ quality: 90 });
+      await CP.stop();
+      cpRef.current = null;
+
+      const file   = base64ToFile(photo.value);
+      const objUrl = URL.createObjectURL(file);
+      const dims   = await new Promise((resolve) => {
+        const img    = new Image();
+        img.onload   = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(objUrl); };
+        img.onerror  = () => { resolve(null); URL.revokeObjectURL(objUrl); };
+        img.src      = objUrl;
+      });
+
+      if (mountedRef.current) onFileReady(file, dims);
+    } catch (err) {
+      console.error("[NativeCamera] capture error:", err);
+      if (mountedRef.current) {
+        setErrorMsg("Couldn't take the photo. Tap Retry to try again.");
+        setPhase("error");
+        countdownActiveRef.current = false;
+      }
+    }
+  }
+
+  async function handleFlip() {
+    if (!cpRef.current || phase === "capturing" || phase === "starting") return;
+    const newPos = facingRef.current === "front" ? "rear" : "front";
+    await launchPreview(newPos);
+  }
+
+  // ── Fallback: native bridge timed out — use web getUserMedia camera ──
+  if (useFallback) {
+    return <CameraCapture onFileReady={onFileReady} onBack={onBack} />;
+  }
+
+  // ── Error screen ─────────────────────────────────────────────────────
+  if (phase === "error") {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center px-8 gap-5 bg-background">
+        <div className="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-950/40 flex items-center justify-center">
+          <AlertTriangle className="w-8 h-8 text-rose-500" />
+        </div>
+        <div className="text-center">
+          <p className="font-bold text-xl mb-2">Camera unavailable</p>
+          <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">{errorMsg}</p>
+        </div>
+        <Button
+          onClick={() => launchPreview("front")}
+          className="h-14 px-8 rounded-2xl text-base font-semibold gap-2"
+        >
+          <RotateCcw className="w-5 h-5" /> Retry
+        </Button>
+        <Button variant="ghost" onClick={onBack} className="text-muted-foreground">
+          ← Go Back
+        </Button>
+      </div>
+    );
+  }
+
+  // ── Capture flash + spinner ───────────────────────────────────────────
+  if (phase === "capturing") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "transparent" }}>
+        <motion.div
+          initial={{ opacity: 0.9 }}
+          animate={{ opacity: 0 }}
+          transition={{ duration: 0.35 }}
+          className="absolute inset-0 bg-white pointer-events-none"
+        />
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-white animate-spin drop-shadow-lg" />
+          <p className="text-white font-semibold text-base drop-shadow">Capturing…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Status pill config
+  const statusMap = {
+    no_person: { label: "Get into frame",  bg: "rgba(0,0,0,0.65)" },
+    detected:  { label: "Adjust position", bg: "rgba(30,64,175,0.85)" },
+    almost:    { label: "Almost there",    bg: "rgba(146,64,14,0.88)" },
+    ready:     { label: "Hold still",      bg: "rgba(6,95,70,0.90)" },
+  };
+  const sc = statusMap[readinessState] ?? statusMap.no_person;
+
+  // ── Main overlay (starting / live / countdown) ────────────────────────
+  return (
+    <div className="fixed inset-0 z-40" style={{ background: "transparent" }}>
+
+      {/* Corner L-brackets */}
+      <CornerBrackets readinessState={readinessState} />
+
+      {/* Starting scrim + spinner */}
+      <AnimatePresence>
+        {phase === "starting" && (
+          <motion.div
+            key="starting-scrim"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-4"
+            style={{ background: "rgba(0,0,0,0.62)" }}
+          >
+            <Loader2 className="w-10 h-10 text-white animate-spin" />
+            <p className="text-white/80 text-sm font-medium tracking-wide">Starting camera…</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Countdown ring */}
+      <AnimatePresence>
+        {phase === "countdown" && countdown !== null && (
+          <motion.div
+            key="countdown-ring"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ type: "spring", damping: 18, stiffness: 260 }}
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          >
+            <CountdownRing seconds={countdown} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Top bar — back + flip buttons */}
+      <div
+        className="absolute top-0 left-0 right-0 z-50 px-5 flex items-center justify-between"
+        style={{ paddingTop: "calc(env(safe-area-inset-top) + 10px)", paddingBottom: 12 }}
+      >
+        <button
+          onClick={onBack}
+          aria-label="Back"
+          style={{ background: "rgba(0,0,0,0.42)" }}
+          className="w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md active:scale-95 transition-transform duration-150"
+        >
+          <ArrowLeft className="w-5 h-5 text-white" />
+        </button>
+        <button
+          onClick={handleFlip}
+          aria-label="Flip camera"
+          style={{ background: "rgba(0,0,0,0.42)" }}
+          className="w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md active:scale-95 transition-transform duration-150"
+        >
+          <SwitchCamera className="w-5 h-5 text-white" />
+        </button>
+      </div>
+
+      {/* Status pill — bottom */}
+      <AnimatePresence mode="wait">
+        {phase !== "starting" && (
+          <motion.div
+            key={readinessState}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.22 }}
+            className="absolute left-4 right-4 z-50"
+            style={{ bottom: "calc(env(safe-area-inset-bottom) + 48px)" }}
+          >
+            <div
+              className="rounded-2xl px-4 py-3 backdrop-blur-md shadow-xl"
+              style={{ background: sc.bg }}
+            >
+              <div className="text-white text-[10px] font-bold uppercase tracking-[0.18em] mb-0.5">
+                {sc.label}
+              </div>
+              <div className="text-white/90 text-sm leading-snug">{hint}</div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -472,6 +974,7 @@ function CameraCapture({ onFileReady, onBack }) {
 
   const videoRef = useRef(null);
   const captureCanvas = useRef(null);
+  const evalCanvas = useRef(document.createElement("canvas")); // frame grab for pose detection
   const viewfinderRef = useRef(null);
   const streamRef = useRef(null);
   const evalTimer = useRef(null);
@@ -490,6 +993,7 @@ function CameraCapture({ onFileReady, onBack }) {
   const [hint, setHint] = useState("Step into the frame");
   const [countdown, setCountdown] = useState(null);
   const [flashFrame, setFlashFrame] = useState(false);
+  const [evalTick, setEvalTick]     = useState(0); // increments each eval cycle
 
   const isFront = facingMode === "user";
 
@@ -523,11 +1027,10 @@ function CameraCapture({ onFileReady, onBack }) {
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: mode },
-            width: { ideal: 1280 },
-            height: { ideal: 1920 },
-          },
+          // No explicit width/height — let iOS use its native camera resolution
+          // so it returns a portrait stream directly. Specifying dimensions
+          // causes iOS to give a landscape stream that gets zoomed by objectFit.
+          video: { facingMode: { ideal: mode } },
           audio: false,
         });
 
@@ -556,6 +1059,10 @@ function CameraCapture({ onFileReady, onBack }) {
   useEffect(() => {
     startCamera(facingMode);
 
+    // Only the IMAGE landmarker is needed — the eval loop draws each video
+    // frame to a canvas and calls detectPose() (IMAGE mode) directly.
+    // This bypasses the VIDEO mode landmarker which silently fails in
+    // WKWebView on iOS due to GPU delegate / timestamp ordering issues.
     MediaPipeLib.getLandmarker()
       .then(() => {
         if (mountedRef.current) setMpReady(true);
@@ -660,25 +1167,41 @@ function CameraCapture({ onFileReady, onBack }) {
   useEffect(() => {
     if (!camReady || !mpReady) return;
 
+    const busy = { current: false };
+
     evalTimer.current = setInterval(async () => {
       const video = videoRef.current;
       if (!video || video.readyState < 2 || didCapture.current) return;
+      if (busy.current) return; // don't overlap async calls
+      busy.current = true;
 
-      let result = { state: "no_person", hint: "Step into the frame" };
+      let result = { state: "no_person", hint: "Step into frame — show your full side" };
 
       try {
-        const detected = await MediaPipeLib.detectPoseForVideo(
-          video,
-          performance.now()
-        );
-        const lm = detected?.landmarks ?? null;
-        result = evaluateReadiness(lm);
-      } catch (_e) {
-        result = { state: "no_person", hint: "Step into the frame" };
+        // Grab the video frame at 320×240 — small enough that CPU-mode
+        // MediaPipe finishes in <50 ms without blocking the main thread.
+        const canvas = evalCanvas.current;
+        const w = video.videoWidth  || 640;
+        const h = video.videoHeight || 480;
+        const EVAL_W = 320;
+        const EVAL_H = Math.round((h / w) * EVAL_W);
+        canvas.width  = EVAL_W;
+        canvas.height = EVAL_H;
+        canvas.getContext("2d").drawImage(video, 0, 0, EVAL_W, EVAL_H);
+        const detected = await MediaPipeLib.detectPose(canvas);
+        result = evaluateReadiness(detected?.landmarks ?? null);
+      } catch (e) {
+        // "no_person_detected" is normal — keep result as no_person
+        if (e?.message !== "no_person_detected") {
+          console.warn("[eval]", e?.message);
+        }
+      } finally {
+        busy.current = false;
       }
 
       if (!mountedRef.current) return;
 
+      setEvalTick((n) => n + 1); // heartbeat — proves the loop is running
       setReadinessState(result.state);
       setHint(result.hint);
 
@@ -696,23 +1219,13 @@ function CameraCapture({ onFileReady, onBack }) {
     return () => clearInterval(evalTimer.current);
   }, [camReady, mpReady, startCountdown, cancelCountdown]);
 
-  const statusBg =
-    readinessState === "ready"
-      ? "bg-emerald-700/90"
-      : readinessState === "almost"
-      ? "bg-amber-700/85"
-      : readinessState === "detected"
-      ? "bg-blue-700/85"
-      : "bg-slate-900/80";
-
-  const statusLabel =
-    readinessState === "ready"
-      ? "Hold still"
-      : readinessState === "almost"
-      ? "Almost set"
-      : readinessState === "detected"
-      ? "Adjust your position"
-      : "Get into frame";
+  const statusMap = {
+    no_person: { label: "Get into frame",  bg: "rgba(0,0,0,0.65)" },
+    detected:  { label: "Adjust position", bg: "rgba(30,64,175,0.85)" },
+    almost:    { label: "Almost there",    bg: "rgba(146,64,14,0.88)" },
+    ready:     { label: "Hold still",      bg: "rgba(6,95,70,0.90)" },
+  };
+  const sc = statusMap[readinessState] ?? statusMap.no_person;
 
   if (mpError) {
     return (
@@ -755,18 +1268,19 @@ function CameraCapture({ onFileReady, onBack }) {
           autoPlay
         />
 
-        <CameraOverlay readinessState={readinessState} />
+        <CornerBrackets readinessState={readinessState} />
 
         <AnimatePresence>
           {countdown !== null && (
             <motion.div
               key="countdown"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ type: "spring", damping: 18, stiffness: 260 }}
               className="absolute inset-0 flex items-center justify-center pointer-events-none"
             >
-              <CountdownDisplay seconds={countdown} />
+              <CountdownRing seconds={countdown} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -807,20 +1321,28 @@ function CameraCapture({ onFileReady, onBack }) {
         </button>
       </div>
 
-      {/* Status banner — floats above the capture button */}
-      <div
-        className="absolute left-4 right-4 z-20"
-        style={{ bottom: statusBottom }}
-      >
-        <div
-          className={`${statusBg} rounded-2xl px-4 py-3 backdrop-blur-md shadow-lg`}
+      {/* Status pill — floats above the capture button */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={readinessState}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.22 }}
+          className="absolute left-4 right-4 z-20"
+          style={{ bottom: statusBottom }}
         >
-          <div className="text-white text-[11px] font-semibold uppercase tracking-wide mb-0.5">
-            {statusLabel}
+          <div
+            className="rounded-2xl px-4 py-3 backdrop-blur-md shadow-xl"
+            style={{ background: sc.bg }}
+          >
+            <div className="text-white text-[10px] font-bold uppercase tracking-[0.18em] mb-0.5">
+              {sc.label}
+            </div>
+            <div className="text-white/90 text-sm leading-snug">{camError || hint}</div>
           </div>
-          <div className="text-white text-sm">{camError || hint}</div>
-        </div>
-      </div>
+        </motion.div>
+      </AnimatePresence>
 
       {/* Capture button — round, iOS-style, anchored to bottom */}
       <div
@@ -848,6 +1370,7 @@ function CameraCapture({ onFileReady, onBack }) {
 export default function CaptureScreen({ onAccepted, onBack, userId }) {
   const [uiState, setUiState] = useState("capture");
   const [processStage, setProcessStage] = useState("detect");
+  const [saveStage, setSaveStage] = useState("upload");
   const [preview, setPreview] = useState(null);
   const [capturedFile, setCapturedFile] = useState(null);
   const [capturedDims, setCapturedDims] = useState(null);
@@ -915,7 +1438,9 @@ export default function CaptureScreen({ onAccepted, onBack, userId }) {
       ankle: "Ankle",
     };
 
-    const dynamic = ["ear", "shoulder", "hip", "knee", "ankle"]
+    // Ankle is excluded — it's not needed for posture analysis and MediaPipe
+    // frequently extrapolates it off-screen with a plausible but wrong position.
+    const dynamic = ["ear", "shoulder", "hip", "knee"]
       .filter((id) => keyLandmarks[id])
       .map((id) => ({
         id,
@@ -949,6 +1474,12 @@ export default function CaptureScreen({ onAccepted, onBack, userId }) {
     setUploading(true);
     setUploadError(null);
 
+    // Switch to a live "saving" screen right away instead of leaving the
+    // user on the Review screen once the button's own spinner clears — this
+    // is what closes the dead gap before results appear.
+    setSaveStage("upload");
+    setUiState("saving");
+
     let publicUrl = preview;
     let storagePath = null;
 
@@ -967,6 +1498,8 @@ export default function CaptureScreen({ onAccepted, onBack, userId }) {
       // still completes and the user gets their results.
     }
 
+    setSaveStage("analyze");
+
     let keyLandmarks = {};
 
     if (qualityResult?.pass && landmarks.length > 0) {
@@ -980,16 +1513,32 @@ export default function CaptureScreen({ onAccepted, onBack, userId }) {
       };
     }
 
-    setUploading(false);
-    onAccepted(publicUrl, keyLandmarks, storagePath);
+    setSaveStage("save");
+
+    // onAccepted (PostureScan.handleImageAccepted) runs the AI summary +
+    // Supabase writes and flips the parent to the results screen when it's
+    // done. We stay mounted on the "saving" ProcessingView the whole time —
+    // no idle state to fall back into — and unmount naturally once the
+    // parent's phase changes.
+    await onAccepted(publicUrl, keyLandmarks, storagePath);
   }, [uploading, preview, capturedFile, userId, qualityResult, landmarks, onAccepted]);
 
   if (uiState === "capture") {
+    // Always use the getUserMedia web camera for live pose-detection preview.
+    // @capacitor-community/camera-preview (toBack:true) requires transparent
+    // WKWebView configuration in the iOS AppDelegate and a specific Xcode
+    // build setup — too fragile in practice. getUserMedia works reliably in
+    // WKWebView on iOS 14.3+ and delivers the same live preview + auto-
+    // countdown experience with the premium CornerBrackets / CountdownRing UI.
     return <CameraCapture onFileReady={handleFileReady} onBack={onBack} />;
   }
 
   if (uiState === "processing") {
     return <ProcessingView stage={processStage} />;
+  }
+
+  if (uiState === "saving") {
+    return <ProcessingView stage={saveStage} stages={SAVE_STAGES} title="Finishing up" />;
   }
 
   return (

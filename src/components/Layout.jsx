@@ -14,13 +14,16 @@ export default function Layout() {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen bg-background font-inter">
+    <div className="min-h-full bg-background font-inter">
       <div className="max-w-lg mx-auto pb-24">
         <Outlet />
       </div>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-xl border-t border-border z-50">
-        <div className="max-w-lg mx-auto flex items-center justify-around py-2 px-4">
+        <div
+          className="max-w-lg mx-auto flex items-center justify-around px-4"
+          style={{ paddingTop: "8px", paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}
+        >
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;

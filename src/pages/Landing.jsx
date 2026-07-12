@@ -93,7 +93,7 @@ async function routeAfterAuth(navigate) {
         spine_score: 0,
         posture_score: 0,
         structural_score: 0,
-        consistency_score: 50,
+        consistency_score: 0, // raw minutes exercised this week (Effort), not a 0-100 score
         mobility_score: 50,
         strength_score: 50,
         updated_at: new Date().toISOString(),
@@ -215,7 +215,7 @@ export default function Landing() {
     const isSignup = screen === "signup";
 
     return (
-      <div className="min-h-screen flex flex-col bg-background">
+      <div className="flex-1 flex flex-col bg-background overflow-hidden min-h-0">
         <div className="flex-1 flex flex-col items-center justify-center px-6 pt-16 pb-6 text-center">
           <motion.div
             initial={{ opacity: 0, y: -16 }}
@@ -296,15 +296,15 @@ export default function Landing() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <div className="flex-1 flex flex-col items-center justify-center px-6 pt-20 pb-6 text-center">
+    <div className="flex-1 flex flex-col bg-background overflow-hidden min-h-0 overscroll-none">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pt-6 pb-2 text-center">
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col items-center mb-10"
+          className="flex flex-col items-center mb-5"
         >
-          <div className="w-20 h-20 bg-primary rounded-[22px] flex items-center justify-center shadow-lg shadow-primary/25 mb-5">
+          <div className="w-16 h-16 bg-primary rounded-[20px] flex items-center justify-center shadow-lg shadow-primary/25 mb-4">
             <SpineIcon />
           </div>
 
@@ -321,7 +321,7 @@ export default function Landing() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.18 }}
-          className="text-[15px] text-muted-foreground leading-relaxed max-w-[280px] mb-8"
+          className="text-[15px] text-muted-foreground leading-relaxed max-w-[280px] mb-5"
         >
           Create an account to start tracking your posture, or log in to continue where you left off.
         </motion.p>
@@ -330,10 +330,10 @@ export default function Landing() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.26 }}
-          className="flex flex-col gap-3 w-full max-w-xs mb-10"
+          className="flex flex-col gap-2.5 w-full max-w-xs"
         >
           {FEATURES.map(({ icon: Icon, label }) => (
-            <div key={label} className="flex items-center gap-3 bg-secondary rounded-2xl px-4 py-3">
+            <div key={label} className="flex items-center gap-3 bg-secondary rounded-2xl px-4 py-2.5">
               <div className="w-8 h-8 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
                 <Icon className="w-4 h-4 text-primary" />
               </div>
@@ -347,7 +347,7 @@ export default function Landing() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.35 }}
-        className="px-6 pb-14 space-y-3"
+        className="px-6 pb-[max(28px,env(safe-area-inset-bottom))] space-y-2.5 flex-shrink-0"
       >
         <Button
           onClick={() => setScreen("signup")}
@@ -374,7 +374,7 @@ export default function Landing() {
           {loadingGuest ? "Loading..." : "Continue as Guest"}
         </Button>
 
-        <p className="text-center text-xs text-muted-foreground leading-relaxed pt-1">
+        <p className="text-center text-xs text-muted-foreground leading-relaxed">
           Guests can try SpineLab before creating a full account.
         </p>
       </motion.div>
@@ -434,8 +434,8 @@ function EmailAuthScreen({ mode: initialMode, onBack }) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <div className="flex-1 flex flex-col justify-center px-6 space-y-4">
+    <div className="flex-1 flex flex-col bg-background overflow-hidden min-h-0 overscroll-none">
+      <div className="flex-1 flex flex-col justify-center px-6 space-y-4 overflow-y-auto">
         <h1 className="text-2xl font-black text-foreground">
           {mode === "signup" ? "Create account with email" : "Log in with email"}
         </h1>

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Flame, Shield, Zap, TrendingUp } from "lucide-react";
+import { Flame, Shield, Zap, TrendingUp, Share2 } from "lucide-react";
 import confetti from "canvas-confetti";
+import { hapticHeavy, hapticSuccess, hapticMedium } from "@/lib/haptics";
+import { shareWorkoutResult } from "@/lib/shareCard";
 
 function getSpineLevel(score) {
   if (score >= 85) return { level: 5, title: "Elite",       color: "text-amber-500",   bg: "bg-amber-50 border-amber-200 dark:bg-amber-950/30",   ring: "#f59e0b" };
@@ -26,9 +28,9 @@ function didLevelUp(oldScore, newScore) {
 
 function explainDelta(label, delta, count) {
   if (delta <= 0) return null;
-  if (label === "Consistency") return "Showing up daily compounds over time.";
-  if (label === "Mobility")    return `${count} mobility exercises improved your range.`;
-  if (label === "Strength")    return `${count} strength moves built spinal support.`;
+  if (label === "Effort")   return "Minutes moved this week build this.";
+  if (label === "Mobility") return `${count} mobility exercises improved your range.`;
+  if (label === "Strength") return `${count} strength moves built spinal support.`;
   return null;
 }
 
@@ -107,6 +109,7 @@ function ParticleBurst({ color }) {
 export default function CompletionCelebration({
   dayOfPlan,
   streak,
+  spineAge,
   scoreSnapshot,
   newScores,
   exerciseCount,
@@ -131,13 +134,37 @@ export default function CompletionCelebration({
 
   const [phase, setPhase]               = useState("icon");
   const [showParticles, setShowParticles] = useState(true);
+  const [shareLabel, setShareLabel]     = useState("Share my score");
+
+  const handleShare = async () => {
+    setShareLabel("Generating…");
+    try {
+      await shareWorkoutResult({
+        spineScore:  newScore,
+        levelTitle:  newLevel.title,
+        levelColor:  newLevel.ring,
+        spineAge,
+        streak:      newStreak,
+      });
+    } catch {
+      // user cancelled or share failed silently
+    } finally {
+      setShareLabel("Share my score");
+    }
+  };
 
   // Sequence the reveals
   useEffect(() => {
     setShowParticles(true);
+    // Haptic on completion — heavy for level-up, success for normal finish
+    if (leveledUp) {
+      hapticHeavy();
+    } else {
+      hapticSuccess();
+    }
     const t1 = setTimeout(() => setShowParticles(false),  800);
     const t2 = setTimeout(() => setPhase("score"),        leveledUp ? 600  : 400);
-    const t3 = setTimeout(() => setPhase("breakdown"),    leveledUp ? 1400 : 1100);
+    const t3 = setTimeout(() => { setPhase("breakdown"); hapticMedium(); }, leveledUp ? 1400 : 1100);
     const t4 = setTimeout(() => setPhase("stats"),        leveledUp ? 2000 : 1700);
     return () => [t1, t2, t3, t4].forEach(clearTimeout);
   }, [leveledUp]);
@@ -146,6 +173,7 @@ export default function CompletionCelebration({
   useEffect(() => {
     if (!leveledUp) return;
     const t = setTimeout(() => {
+      hapticHeavy();
       confetti({
         particleCount: 140,
         spread: 80,
@@ -180,11 +208,11 @@ export default function CompletionCelebration({
       explain: explainDelta("Strength",    (newScores?.strengthScore    ?? 0) - (scoreSnapshot?.strengthScore    ?? 0), strengthCount),
     },
     {
-      label:   "Consistency",
-      oldVal:  scoreSnapshot?.consistencyScore ?? 0,
-      newVal:  newScores?.consistencyScore     ?? 0,
-      color:   "#0ea5e9",
-      explain: explainDelta("Consistency", (newScores?.consistencyScore ?? 0) - (scoreSnapshot?.consistencyScore ?? 0), 0),
+      label:   "Effort",
+      oldVal:  scoreSnapshot?.effortScore ?? 0,
+      newVal:  newScores?.effortScore     ?? 0,
+      color:   "#f59e0b",
+      explain: explainDelta("Effort", (newScores?.effortScore ?? 0) - (scoreSnapshot?.effortScore ?? 0), 0),
     },
   ];
 
@@ -488,6 +516,15 @@ export default function CompletionCelebration({
               >
                 <TrendingUp className="w-5 h-5" />
                 Return to Dashboard
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={handleShare}
+                className="w-full h-12 rounded-2xl text-sm font-semibold gap-2"
+              >
+                <Share2 className="w-4 h-4" />
+                {shareLabel}
               </Button>
 
               <Button

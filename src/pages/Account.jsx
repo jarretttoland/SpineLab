@@ -26,7 +26,11 @@ import {
   Cpu,
   Bell,
   Calendar,
+  Moon,
+  Sun,
+  Sparkles,
 } from "lucide-react";
+import { getTheme, setTheme } from "@/lib/theme";
 import {
   requestPermission,
   checkPermission,
@@ -133,6 +137,14 @@ export default function Account() {
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [updatingConsent, setUpdatingConsent] = useState(false);
+
+  // Appearance
+  const [theme, setThemeState] = useState(() => getTheme());
+
+  const handleThemeChange = (newTheme) => {
+    setTheme(newTheme);
+    setThemeState(newTheme);
+  };
 
   // Notification preferences
   const [dailyEnabled, setDailyEnabled] = useState(false);
@@ -399,14 +411,14 @@ export default function Account() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-6">
+      <div className="flex items-center justify-center bg-background" style={{ height: "calc(100dvh - 96px)" }}>
         <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background px-6 pt-14 pb-24">
+    <div className="min-h-full bg-background px-6 pt-4 pb-24">
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -558,7 +570,42 @@ export default function Account() {
           </section>
         </div>
 
-        <div className="mt-8">
+        {/* ── APPEARANCE ── */}
+        <div className="mt-6">
+          <h2 className="text-sm font-bold mb-3">Appearance</h2>
+          <div className="rounded-2xl border border-border bg-card p-1 flex gap-1">
+            {[
+              { value: "light", Icon: Sun,      label: "Light", locked: false },
+              { value: "dark",  Icon: Moon,     label: "Dark",  locked: false },
+              { value: "gold",  Icon: Sparkles, label: "Gold",  locked: spineScore < 100 },
+            ].map(({ value, Icon, label, locked }) => (
+              <button
+                key={value}
+                onClick={() => !locked && handleThemeChange(value)}
+                disabled={locked}
+                className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                  locked
+                    ? "opacity-40 cursor-not-allowed"
+                    : theme === value
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Icon className="w-3.5 h-3.5" />
+                  {label}
+                </div>
+                {locked && (
+                  <span className="text-[9px] font-bold tracking-wide text-amber-500 mt-0.5">
+                    SpineLab 100
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6">
           <Button
             onClick={handleLogout}
             disabled={loggingOut || resetting || deleting}

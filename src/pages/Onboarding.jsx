@@ -23,6 +23,8 @@ import {
   generatePlanFocus,
   calculateFinalSpineScore,
   getInitialConsistencyScore,
+  getEffortPercent,
+  calcSpineAge,
 } from "@/lib/spineScore";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,9 +35,6 @@ import {
   FileText,
   Camera,
   Check,
-  RotateCcw,
-  Ruler,
-  Sun,
 } from "lucide-react";
 
 const PAIN_AREA_OPTIONS = [
@@ -163,7 +162,7 @@ function SingleQuestionStep({
   const canProceed = selected !== null && selected !== undefined;
 
   return (
-    <div className="min-h-screen flex flex-col px-6 pt-12 pb-8">
+    <div className="min-h-full flex flex-col px-6 pt-4 pb-8">
       <ProgressBar step={step} total={total} />
 
       <AnimatePresence mode="wait">
@@ -260,7 +259,7 @@ function MultiSelectStep({
   const canProceed = singleSelect ? selected.length === 1 : selected.length > 0;
 
   return (
-    <div className="min-h-screen flex flex-col px-6 pt-12 pb-8">
+    <div className="min-h-full flex flex-col px-6 pt-4 pb-8">
       <ProgressBar step={step} total={total} />
 
       <AnimatePresence mode="wait">
@@ -279,6 +278,10 @@ function MultiSelectStep({
           <h1 className="text-2xl font-bold tracking-tight leading-snug mb-2">
             {question}
           </h1>
+
+          {!singleSelect && (
+            <p className="text-xs text-muted-foreground mb-1">Select all that apply</p>
+          )}
 
           {subtitle ? (
             <p className="text-sm text-muted-foreground mb-7">{subtitle}</p>
@@ -344,7 +347,7 @@ function MultiSelectStep({
 
 function IntroStep({ onStart, onPrivacy, onTerms }) {
   return (
-    <div className="min-h-screen px-6 pt-14 pb-10 flex flex-col">
+    <div className="min-h-full px-6 pt-4 pb-10 flex flex-col">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -375,7 +378,7 @@ function IntroStep({ onStart, onPrivacy, onTerms }) {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border bg-secondary/40 p-5 mb-8">
+        <div className="rounded-3xl border border-border bg-secondary/40 p-5">
           <p className="text-xs uppercase tracking-[0.16em] text-primary font-semibold mb-3">
             Privacy & legal
           </p>
@@ -406,11 +409,11 @@ function IntroStep({ onStart, onPrivacy, onTerms }) {
             </button>
           </div>
         </div>
-
-        <Button onClick={onStart} className="h-14 rounded-2xl text-base font-semibold">
-          Get Started
-        </Button>
       </motion.div>
+
+      <Button onClick={onStart} className="h-14 rounded-2xl text-base font-semibold mt-8">
+        Get Started
+      </Button>
     </div>
   );
 }
@@ -460,15 +463,15 @@ function MiniSilhouette() {
   );
 }
 
-function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
-  const TIPS = [
-    { icon: RotateCcw, text: "Stand sideways" },
-    { icon: Ruler, text: "8–12 ft from camera" },
-    { icon: Sun, text: "Good light, plain wall" },
-  ];
+const SCAN_LANDMARKS = [
+  { color: "#3b82f6", label: "Ear",      detail: "Head position and forward head posture" },
+  { color: "#8b5cf6", label: "Shoulder", detail: "Upper spine and thoracic alignment" },
+  { color: "#10b981", label: "Hip",      detail: "Pelvic tilt and lumbar curve" },
+];
 
+function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
   return (
-    <div className="min-h-screen px-6 pt-12 pb-10 flex flex-col">
+    <div className="min-h-full px-6 pt-4 pb-10 flex flex-col">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -477,41 +480,36 @@ function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
         {/* Header */}
         <div className="mb-5">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary mb-2">
-            Optional · about 30 seconds
+            AI Posture Scan
           </p>
 
           <h1 className="text-[28px] font-bold tracking-tight leading-tight mb-2">
-            Get your real Spine Score
+            Position yourself
           </h1>
 
           <p className="text-muted-foreground text-sm leading-relaxed">
-            Your answers give us a great starting point. A quick posture scan
-            makes it precise.
+            A quick posture scan gives you a real Spine Score based on your
+            actual alignment — not just your answers.
           </p>
         </div>
 
-        {/* Hero card — silhouette + benefits side-by-side */}
-        <div className="relative rounded-3xl border border-border bg-gradient-to-b from-primary/[0.04] to-card p-5 mb-4 overflow-hidden">
-          <span className="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-[0.14em] text-primary bg-primary/10 px-2.5 py-1 rounded-full">
-            Recommended
-          </span>
-
-          <div className="flex items-center gap-4">
-            {/* Silhouette */}
+        {/* Hero card */}
+        <div className="rounded-3xl border border-border bg-gradient-to-b from-primary/[0.04] to-card p-5 mb-4">
+          {/* Silhouette + prep bullets */}
+          <div className="flex items-center gap-4 mb-5">
             <div
               className="text-foreground shrink-0"
-              style={{ height: 180, width: 92 }}
+              style={{ height: 160, width: 82 }}
               aria-hidden="true"
             >
               <MiniSilhouette />
             </div>
 
-            {/* Benefits */}
-            <div className="flex-1 space-y-2.5 pt-7">
+            <div className="flex-1 space-y-2.5">
               {[
-                "Measured score, not an estimate",
-                "Real Spine Score from day one",
-                "Accurate baseline for progress",
+                "Stand sideways, full body visible",
+                "5–6 ft from camera, plain background",
+                "Camera counts down 5 seconds before photo",
               ].map((line) => (
                 <div key={line} className="flex items-start gap-2.5">
                   <div className="w-4 h-4 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
@@ -525,23 +523,24 @@ function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
             </div>
           </div>
 
-          {/* Quick how-to chips */}
-          <div className="mt-5 pt-4 border-t border-border/70">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground mb-2.5">
-              How it works
+          {/* What we measure */}
+          <div className="pt-4 border-t border-border/70">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground mb-3">
+              What we measure
             </p>
-            <div className="grid grid-cols-3 gap-2">
-              {TIPS.map(({ icon: Icon, text }) => (
-                <div
-                  key={text}
-                  className="flex flex-col items-center text-center gap-1.5 px-2 py-3 rounded-2xl bg-background/70 border border-border/60"
-                >
-                  <div className="w-7 h-7 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Icon className="w-3.5 h-3.5 text-primary" />
+            <div className="space-y-2.5">
+              {SCAN_LANDMARKS.map(({ color, label, detail }) => (
+                <div key={label} className="flex items-center gap-3">
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${color}18`, border: `2px solid ${color}` }}
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
                   </div>
-                  <p className="text-[11px] font-medium text-foreground/80 leading-tight">
-                    {text}
-                  </p>
+                  <div>
+                    <span className="text-[13px] font-semibold text-foreground">{label}</span>
+                    <span className="text-[12px] text-muted-foreground"> — {detail}</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -549,15 +548,15 @@ function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
         </div>
 
         {/* Privacy reassurance */}
-        <div className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-secondary/50 mb-6">
+        <div className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-secondary/50 mb-4">
           <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Your photo is used only for analysis. Delete anytime from your account.
+            Your photo is used only for posture analysis and is never shared. Delete anytime from your account.
           </p>
         </div>
 
         {/* CTAs */}
-        <div className="space-y-3">
+        <div className="mt-auto space-y-3">
           <Button
             onClick={onScanNow}
             disabled={saving}
@@ -590,26 +589,6 @@ function ScanOptionStep({ saving, onScanNow, onSkip, onBack }) {
   );
 }
 
-function getAgeRangeMidpoint(ageRange) {
-  if (!ageRange) return 35;
-  const key = ageRange.toLowerCase().replace(/\s+/g, "").trim();
-  const matchTo   = key.match(/(\d+)to(\d+)/);
-  if (matchTo)   return Math.round((parseInt(matchTo[1])   + parseInt(matchTo[2]))   / 2);
-  const matchDash = key.match(/(\d+)-(\d+)/);
-  if (matchDash) return Math.round((parseInt(matchDash[1]) + parseInt(matchDash[2])) / 2);
-  const matchPlus  = key.match(/(\d+)(?:plus|\+)/);
-  if (matchPlus)  return parseInt(matchPlus[1]) + 7;
-  const matchUnder = key.match(/under(\d+)/);
-  if (matchUnder) return parseInt(matchUnder[1]) - 5;
-  return 35;
-}
-
-function calcSpineAge(spineScore, ageRange) {
-  const midAge = getAgeRangeMidpoint(ageRange);
-  const raw    = midAge - Math.floor((spineScore - 50) / 5);
-  return Math.max(18, Math.min(midAge + 10, raw));
-}
-
 function getResultsLevel(score) {
   if (score >= 85) return { title: "Elite",       color: "text-amber-500",   ring: "#f59e0b", bg: "bg-amber-50 border-amber-200"   };
   if (score >= 70) return { title: "Resilient",   color: "text-violet-500",  ring: "#8b5cf6", bg: "bg-violet-50 border-violet-200" };
@@ -622,10 +601,10 @@ function ResultsStep({ results, saving, onBack, onConfirm, isEditMode, usedScan,
   const level    = getResultsLevel(results.score);
   const spineAge = calcSpineAge(results.score, ageRange);
 
-  const planFocusIcons = ["🧘", "💪", "🔄", "🎯", "⚡"];
+  const planFocusIcons = ["🧘", "💪", "🔄", "🎯", "⚡", "🌀", "🏋️", "🎯", "✨"];
 
   return (
-    <div className="min-h-screen px-5 pt-10 pb-10 flex flex-col bg-background">
+    <div className="min-h-full px-5 pt-4 flex flex-col bg-background">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -786,7 +765,7 @@ function ResultsStep({ results, saving, onBack, onConfirm, isEditMode, usedScan,
       </motion.div>
 
       {/* ── CTA ── */}
-      <div className="max-w-lg mx-auto w-full flex gap-3 pt-2">
+      <div className="max-w-lg mx-auto w-full flex gap-3 pt-4 pb-safe" style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
         <Button
           variant="outline"
           onClick={onBack}
@@ -820,11 +799,15 @@ export default function Onboarding() {
     params.get("fromScan") === "true" ||
     location.state?.fromScan === true;
 
+  const returnToScanOption = location.state?.returnToScanOption === true;
+
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
 
-  const [phase, setPhase] = useState(isEditMode ? "pain_multi" : "intro");
+  const [phase, setPhase] = useState(
+    returnToScanOption ? "scan_option" : isEditMode ? "pain_multi" : "intro"
+  );
   const [followUpIndex, setFollowUpIndex] = useState(0);
 
   const [painAreas, setPainAreas] = useState([]);
@@ -890,9 +873,12 @@ export default function Onboarding() {
         ? profileData.structural_score
         : calculateStructuralBaseline(answers, postureFindings);
 
+    // `consistency_score` now stores raw weekly effort minutes, not a 0-100
+    // score, so it must be converted before feeding it into the spine score
+    // blend below.
     const consistencyScore =
       typeof profileData?.consistency_score === "number"
-        ? profileData.consistency_score
+        ? getEffortPercent(profileData.consistency_score)
         : getInitialConsistencyScore();
 
     const score =
@@ -956,6 +942,33 @@ export default function Onboarding() {
         setProfile(profileData ?? null);
 
         if (fromScan && profileData) {
+          // This is a fresh mount (we navigated here from /onboarding-scan),
+          // so local state like `followUpAnswers` is back at its initial
+          // defaults (ageRange: null, etc). Restore it from the profile we
+          // just fetched — otherwise ResultsStep (and a later
+          // handleSaveAndGoHome save) will use null/default values instead
+          // of what the user actually answered, even though the DB row
+          // itself is correct.
+          const restoredAnswers = buildAnswersFromProfile(profileData);
+
+          setPainAreas(restoredAnswers.painAreas);
+          setPrimaryPain(restoredAnswers.primaryPain);
+          setGoals(
+            restoredAnswers.primaryGoal
+              ? Array.from(
+                  new Set([restoredAnswers.primaryGoal, ...restoredAnswers.secondaryGoals])
+                )
+              : restoredAnswers.secondaryGoals
+          );
+          setPrimaryGoal(restoredAnswers.primaryGoal);
+          setFollowUpAnswers({
+            movementResponse: restoredAnswers.movementResponse,
+            sittingHours: restoredAnswers.sittingHours,
+            activityLevel: restoredAnswers.activityLevel,
+            spineSurgery: restoredAnswers.spineSurgery,
+            ageRange: restoredAnswers.ageRange,
+          });
+
           const generatedResults = generateResultsFromProfile(profileData);
 
           setResults(generatedResults);
@@ -1187,9 +1200,14 @@ export default function Onboarding() {
 
       works_out: followUpAnswers.activityLevel === "very_active",
 
-      structural_score: currentResults.structuralScore,
-      consistency_score: currentResults.consistencyScore,
-      spine_score: currentResults.score,
+      structural_score:  currentResults.structuralScore,
+      // `consistency_score` stores raw weekly effort minutes (see spineScore.js).
+      // Preserve the existing accumulated minutes when editing an existing
+      // profile; start fresh at 0 minutes for brand-new onboarding.
+      consistency_score: isEditMode ? (profile?.consistency_score ?? 0) : 0,
+      mobility_score:    currentResults.breakdown?.mobility ?? 50,
+      strength_score:    currentResults.breakdown?.strength ?? 50,
+      spine_score:       currentResults.score,
 
       onboarding_complete: complete,
 

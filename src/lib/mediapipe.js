@@ -32,13 +32,15 @@ async function buildImageLandmarker() {
   return PoseLandmarker.createFromOptions(vision, {
     baseOptions: {
       modelAssetPath: MODEL_URL,
-      delegate: "GPU",
+      // CPU: GPU delegate can silently produce a non-functional landmarker
+      // inside WKWebView (Capacitor iOS) — CPU is always reliable.
+      delegate: "CPU",
     },
     runningMode: "IMAGE",
     numPoses: 1,
-    minPoseDetectionConfidence: 0.5,
-    minPosePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+    minPoseDetectionConfidence: 0.3,
+    minPosePresenceConfidence: 0.3,
+    minTrackingConfidence: 0.3,
     outputSegmentationMasks: false,
   });
 }
@@ -49,13 +51,16 @@ async function buildVideoLandmarker() {
   return PoseLandmarker.createFromOptions(vision, {
     baseOptions: {
       modelAssetPath: MODEL_URL,
-      delegate: "GPU",
+      // CPU is more reliable than GPU in WKWebView on iOS — the Metal/WebGL
+      // path can silently fail, causing detectForVideo to always return null.
+      delegate: "CPU",
     },
     runningMode: "VIDEO",
     numPoses: 1,
-    minPoseDetectionConfidence: 0.5,
-    minPosePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+    // Lower thresholds so people at 5–12 ft away are still detected.
+    minPoseDetectionConfidence: 0.3,
+    minPosePresenceConfidence: 0.3,
+    minTrackingConfidence: 0.3,
     outputSegmentationMasks: false,
   });
 }
@@ -189,7 +194,10 @@ export function extractKeyLandmarks(lm) {
     ear,
     shoulder,
     hip,
-    knee: knee && knee.visibility >= MIN_VIS_OPTIONAL ? knee : null,
-    ankle: ankle && ankle.visibility >= MIN_VIS_OPTIONAL ? ankle : null,
+    // Higher thresholds for lower-body landmarks — MediaPipe extrapolates
+    // knee/ankle position even when they're off-screen, producing plausible
+    // but incorrect coordinates with low visibility scores.
+    knee:  knee  && knee.visibility  >= 0.70 ? knee  : null,
+    ankle: ankle && ankle.visibility >= 0.75 ? ankle : null,
   };
 }

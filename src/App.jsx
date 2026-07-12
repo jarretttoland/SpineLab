@@ -17,8 +17,11 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
 } from "react-router-dom";
+import { useEffect } from "react";
 import { Analytics } from "@vercel/analytics/react";
+import { initPurchases, identifyUser, checkPremiumEntitlement, syncSubscriptionToSupabase } from "@/lib/purchases";
 
 import PageNotFound from "./lib/PageNotFound";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
@@ -34,6 +37,16 @@ import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Sources from "./pages/Sources";
 
+/** Resets the app-shell scroll container to the top on every route change. */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const shell = document.querySelector(".app-shell");
+    if (shell) shell.scrollTop = 0;
+  }, [pathname]);
+  return null;
+}
+
 const LoadingScreen = () => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
     <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-slate-800 animate-spin" />
@@ -41,7 +54,22 @@ const LoadingScreen = () => (
 );
 
 const ProtectedAppRoutes = () => {
-  const { isLoadingAuth, isAuthenticated } = useAuth();
+  const { isLoadingAuth, isAuthenticated, user } = useAuth();
+
+  // Initialize RevenueCat immediately (anonymous) so offerings are ready before
+  // the paywall opens. Then identify the user and sync entitlement once auth resolves.
+  useEffect(() => {
+    initPurchases(null); // anonymous init — fast, no auth needed
+  }, []);
+
+  useEffect(() => {
+    if (isLoadingAuth || !isAuthenticated || !user?.id) return;
+    (async () => {
+      await identifyUser(user.id);
+      const isPremium = await checkPremiumEntitlement();
+      await syncSubscriptionToSupabase(user.id, isPremium);
+    })();
+  }, [isLoadingAuth, isAuthenticated, user?.id]);
 
   if (isLoadingAuth) return <LoadingScreen />;
 
@@ -85,6 +113,7 @@ export default function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <div className="app-shell">
+            <ScrollToTop />
             <AppRoutes />
             <Analytics />
           </div>

@@ -23,6 +23,28 @@ import {
   createPostureScan,
 } from "@/lib/postureScanSupabase";
 import { scheduleReScanReminder } from "@/lib/notifications";
+import { getActiveWeeklyMinutes, getEffortPercent, calcSpineAge } from "@/lib/spineScore";
+import { writeSpineScore } from "@/lib/healthkit";
+import { supabase } from "@/lib/supabase";
+import PaywallScreen from "@/components/paywall/PaywallScreen";
+
+// ── Derive the single most important finding for exercise targeting ─────────
+const SEVERITY_RANK = { notable: 3, moderate: 2, mild: 1, good: 0, invalid: -1 };
+const FINDING_ID_MAP = {
+  forward_head:      "forward_head",
+  rounded_shoulders: "rounded_shoulders",
+  upper_crossed:     "rounded_shoulders",
+  pelvic_tilt:       "pelvic_tilt",
+  lumbar_lordosis:   "kyphosis",
+  kyphosis_lordosis: "kyphosis",
+};
+
+function deriveTopFinding(findings = []) {
+  const actionable = findings
+    .filter((f) => FINDING_ID_MAP[f.id] && f.severity !== "good" && f.severity !== "invalid")
+    .sort((a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0));
+  return actionable[0] ? FINDING_ID_MAP[actionable[0].id] : null;
+}
 import { Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -37,10 +59,11 @@ export default function PostureScan() {
   const [detectionFailed, setDetectionFailed] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [previousScans, setPreviousScans] = useState([]);
-  const [bootError, setBootError] = useState(null);
+  const [user, setUser]                     = useState(null);
+  const [profile, setProfile]               = useState(null);
+  const [previousScans, setPreviousScans]   = useState([]);
+  const [bootError, setBootError]           = useState(null);
+  const [scansThisMonth, setScansThisMonth] = useState(0);
 
   const mountedRef = useRef(true);
 
@@ -58,14 +81,25 @@ export default function PostureScan() {
         if (!mountedRef.current) return;
         setUser(currentUser);
 
-        const [profileData, scans] = await Promise.all([
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+
+        const [profileData, scans, monthCountResult] = await Promise.all([
           fetchProfile(currentUser.id),
           fetchPreviousScans(currentUser.id, 10),
+          supabase
+            .from("posture_scans")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", currentUser.id)
+            .gte("created_at", monthStart.toISOString()),
         ]);
 
         if (!mountedRef.current) return;
+
         setProfile(profileData);
         setPreviousScans(scans);
+        setScansThisMonth(monthCountResult.count ?? 0);
 
         // During onboarding, the user just came from the combined
         // pitch + instructions screen (ScanOptionStep), so skip the
@@ -116,7 +150,7 @@ export default function PostureScan() {
 
   const handleConsentDecline = () => {
     if (isOnboardingFlow) {
-      navigate("/onboarding", { replace: true });
+      navigate("/onboarding", { replace: true, state: { returnToScanOption: true } });
     } else {
       setPhase("guide");
     }
@@ -160,9 +194,48 @@ export default function PostureScan() {
       const result = analyzePosture(keyLandmarks, 1, 1.5, true);
       findings = result?.findings || [];
       overallScore = result?.overallScore ?? 0;
-      summary = result?.summary || "";
+      summary = result?.summary || "";   // template fallback
       pattern = result?.pattern || "";
       subscores = result?.subscores || subscores;
+
+      // ── Real AI summary via Supabase Edge Function ──────────────────────
+      // Raced against a timeout so a slow AI call can't stall the whole
+      // scan — if it doesn't answer quickly we just keep the template
+      // summary computed above and move on.
+      try {
+        const edgeRes = await Promise.race([
+          fetch(
+            "https://dslaxbxapbamrreopcdm.supabase.co/functions/v1/analyze-posture",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzbGF4YnhhcGJhbXJyZW9wY2RtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNjU5NTMsImV4cCI6MjA5MDY0MTk1M30.TUFikVyCNkRPpu7dF-eLTVNZLGSwQFP37UcIXP2H3-k",
+                "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzbGF4YnhhcGJhbXJyZW9wY2RtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNjU5NTMsImV4cCI6MjA5MDY0MTk1M30.TUFikVyCNkRPpu7dF-eLTVNZLGSwQFP37UcIXP2H3-k",
+              },
+              body: JSON.stringify({
+                findings,
+                overallScore,
+                pattern,
+                subscores,
+                ageRange: profile?.age_range ?? null,
+                scanCount: (previousScans?.length ?? 0) + 1,
+              }),
+            }
+          ),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("ai_summary_timeout")), 4000)
+          ),
+        ]);
+        if (edgeRes.ok) {
+          const edgeData = await edgeRes.json();
+          if (edgeData?.summary) summary = edgeData.summary;
+        }
+      } catch (aiErr) {
+        // Non-fatal — keep the template summary if AI call fails or times out
+        console.warn("[PostureScan] AI summary unavailable, using template:", aiErr);
+      }
+      // ─────────────────────────────────────────────────────────────────────
     } catch (err) {
       console.error("[PostureScan] analyze error:", err);
     }
@@ -184,7 +257,11 @@ export default function PostureScan() {
 
     const previousStructural =
       profile?.structural_score ?? profile?.spine_score ?? 50;
-    const consistencyScore = profile?.consistency_score ?? 50;
+    // `consistency_score` stores raw weekly effort minutes, not a 0-100
+    // score (see spineScore.js) — convert before blending into spine score.
+    const consistencyScore = getEffortPercent(getActiveWeeklyMinutes(profile));
+    const mobilityScore    = profile?.mobility_score    ?? 50;
+    const strengthScore    = profile?.strength_score    ?? 50;
     const previousSpineScore = profile?.spine_score ?? 50;
 
     const structuralAdjustment = Math.round((overallScore - 70) / 6);
@@ -193,9 +270,15 @@ export default function PostureScan() {
       Math.min(100, previousStructural + structuralAdjustment)
     );
     const newSpineScore = Math.round(
-      newStructuralScore * 0.7 + consistencyScore * 0.3
+      newStructuralScore * 0.4 +
+      consistencyScore   * 0.2 +
+      mobilityScore      * 0.2 +
+      strengthScore      * 0.2
     );
     const spineDelta = newSpineScore - previousSpineScore;
+
+    // Spine age: shift from the user's actual age midpoint based on spine score
+    const spineAge = calcSpineAge(newSpineScore, profile?.age_range);
 
     const detectedLandmarks = ["ear", "shoulder", "hip"];
     if (keyLandmarks.knee) detectedLandmarks.push("knee");
@@ -227,50 +310,65 @@ export default function PostureScan() {
 
     if (user?.id) {
       try {
-        await createPostureScan({
-          user_id: user.id,
-          image_url: imageUrl,
-          image_path: imagePath,
-          issues: findings.map((f) => ({
-            id: f.id,
-            label: f.label,
-            detail: f.detail,
-            confidence: f.confidence || "medium",
-            severity:
-              f.severity === "notable"
-                ? "high"
-                : f.severity === "moderate"
-                ? "medium"
-                : f.severity === "invalid"
-                ? "invalid"
-                : "low",
-          })),
-          landmarks_detected: detectedLandmarks,
-          quality_score: overallScore,
-          scan_date: today,
-          created_at: new Date().toISOString(),
-          notes: summary,
-          pattern,
-          subscores,
-        });
+        const topFinding = deriveTopFinding(findings);
 
-        const updatedProfile = await upsertProfile({
-          id: user.id,
-          scan_results: findings
-            .filter((f) => f.severity !== "good")
-            .map((f) => f.id),
-          scan_image_url: imageUrl,
-          posture_score: overallScore,
-          structural_score: newStructuralScore,
-          spine_score: newSpineScore,
-        });
+        // These two writes don't depend on each other's result, so run them
+        // concurrently instead of one after another — cuts save latency
+        // roughly in half.
+        const [, updatedProfile] = await Promise.all([
+          createPostureScan({
+            user_id: user.id,
+            image_url: imageUrl,
+            image_path: imagePath,
+            issues: findings.map((f) => ({
+              id: f.id,
+              label: f.label,
+              detail: f.detail,
+              confidence: f.confidence || "medium",
+              severity:
+                f.severity === "notable"
+                  ? "high"
+                  : f.severity === "moderate"
+                  ? "medium"
+                  : f.severity === "invalid"
+                  ? "invalid"
+                  : "low",
+            })),
+            landmarks_detected: detectedLandmarks,
+            quality_score: overallScore,
+            scan_date: today,
+            created_at: new Date().toISOString(),
+            notes: summary,
+            pattern,
+            subscores,
+          }),
+          upsertProfile({
+            id: user.id,
+            scan_results: findings
+              .filter((f) => f.severity !== "good")
+              .map((f) => f.id),
+            scan_image_url: imageUrl,
+            posture_score: overallScore,
+            structural_score: newStructuralScore,
+            spine_score: newSpineScore,
+            ...(topFinding ? { top_finding: topFinding } : {}),
+          }),
+        ]);
 
         if (!mountedRef.current) return;
         setProfile(updatedProfile);
 
-        const refreshedScans = await fetchPreviousScans(user.id, 10);
-        if (!mountedRef.current) return;
-        setPreviousScans(refreshedScans);
+        // Write Spine Score to Apple Health (no-ops if HealthKit unavailable)
+        writeSpineScore(newSpineScore).catch(() => {});
+
+        // Refresh scan history in the background — it's only used to compute
+        // trend on the *next* scan, not to render the results screen the
+        // user is about to see, so it shouldn't block navigation.
+        fetchPreviousScans(user.id, 10)
+          .then((refreshed) => {
+            if (mountedRef.current) setPreviousScans(refreshed);
+          })
+          .catch(() => {});
       } catch (err) {
         console.error("[PostureScan] save error:", err);
         if (!mountedRef.current) return;
@@ -297,6 +395,7 @@ export default function PostureScan() {
       spineDelta,
       previousSpineScore,
       newSpineScore,
+      spineAge,
     });
     setPhase("results");
 
@@ -326,9 +425,14 @@ export default function PostureScan() {
     });
   };
 
-  // Wraps the user's tap on "Start Scan" — if they need consent, we
-  // route them through the modal first.
+  // Wraps the user's tap on "Start Scan".
+  // Free users are gated to 1 scan/month — show paywall if they've used it.
   const handleStartScanFromGuide = () => {
+    const isPremium = profile?.subscription_tier === "premium";
+    if (!isPremium && scansThisMonth >= 1) {
+      setPhase("paywall");
+      return;
+    }
     if (needsConsent) {
       setPhase("consent");
     } else {
@@ -356,6 +460,19 @@ export default function PostureScan() {
       <div className="min-h-[100dvh] flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
       </div>
+    );
+  }
+
+  if (phase === "paywall") {
+    return (
+      <PaywallScreen
+        source="scan"
+        onClose={() => setPhase("guide")}
+        onUpgrade={() => {
+          // RevenueCat purchase flow wired here later
+          setPhase("guide");
+        }}
+      />
     );
   }
 
@@ -410,6 +527,7 @@ export default function PostureScan() {
         spineDelta={scanData?.spineDelta ?? 0}
         previousSpineScore={scanData?.previousSpineScore ?? 50}
         newSpineScore={scanData?.newSpineScore ?? 50}
+        spineAge={scanData?.spineAge ?? null}
         detectionFailed={detectionFailed}
         saveError={saveError}
         onNewScan={handleNewScan}

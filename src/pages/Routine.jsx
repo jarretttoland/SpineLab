@@ -2,21 +2,20 @@ import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
-  Flame,
   Play,
   Check,
   ChevronRight,
-  Sparkles,
-  Trophy,
   SlidersHorizontal,
-  Zap,
 } from "lucide-react";
 import MedicalDisclaimer from "@/components/legal/MedicalDisclaimer";
 import WorkoutSession from "@/components/routine/WorkoutSession";
 import ExerciseDetailView from "@/components/routine/ExerciseDetailView";
 import ExerciseMedia from "@/components/routine/ExerciseMedia";
 import DailyAdjustSheet from "@/components/routine/DailyAdjustSheet";
+import ProtocolSelectSheet from "@/components/routine/ProtocolSelectSheet";
+import PaywallScreen from "@/components/paywall/PaywallScreen";
 import { supabase } from "@/lib/supabase";
+import { getActiveWeeklyMinutes, getEffortPercent, calcSpineAge } from "@/lib/spineScore";
 
 const STORAGE_KEYS = {
   routineDayKey:   "spinelab_routine_day_key",
@@ -48,14 +47,6 @@ function getSpineLevel(score) {
   return                   { level: 1, title: "Rebuilding",  color: "text-rose-500",    bg: "bg-rose-50 border-rose-200",     ring: "#f43f5e" };
 }
 
-function getNextLevelThreshold(score) {
-  if (score >= 85) return null;
-  if (score >= 70) return 85;
-  if (score >= 55) return 70;
-  if (score >= 40) return 55;
-  return 40;
-}
-
 function loadLocalJSON(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -78,17 +69,12 @@ function formatDuration(totalSeconds = 0) {
   return `${Math.ceil(totalSeconds / 60)} min`;
 }
 
-function getProgressMessage(streak) {
-  if (streak >= 13) return "You're building real momentum. Keep it rolling.";
-  if (streak >= 6)  return "One more strong week and this starts becoming a habit.";
-  if (streak >= 2)  return "Nice work. Consistency is starting to stack.";
-  return "Start today and build your first streak.";
-}
-
 function getTodayFocus(planType) {
-  if (planType === "neck")     return "Neck + posture reset";
-  if (planType === "mid_back") return "Upper back + posture opening";
-  if (planType === "low_back") return "Core + pelvic support";
+  if (planType === "neck")          return "Neck + posture reset";
+  if (planType === "mid_back")      return "Upper back + posture opening";
+  if (planType === "low_back")      return "Core + pelvic support";
+  if (planType === "desk_worker")   return "Desk Worker Protocol";
+  if (planType === "low_back_pain") return "Low Back Pain Protocol";
   return "Balanced spine support";
 }
 
@@ -244,7 +230,103 @@ function getChairOnlyPlan() {
   return ["360 Breathing","Sitting Neck Flexion Stretch","Seated Upright Twists","Sitting Thoracic Spine Flexion","Chin Tuck"];
 }
 
-function getPlanTemplate(planType, dayIndex) {
+// ── Finding → targeted exercises ──────────────────────────────────────────
+// Maps the top_finding stored on the profile to the exercises that best
+// address it. If none of those are already in today's plan, one is swapped
+// in at position 3 (keeping the breathing opener and early mobility intact).
+
+const FINDING_TARGETS = {
+  forward_head:      ["Chin Tuck", "Forward Head Posture Hold", "Sitting Neck Flexion Stretch"],
+  rounded_shoulders: ["Wall Angels Standing", "Standing Scapular External Rotation", "Bent Arm Chest Stretch", "Lying Floor Row Hold"],
+  pelvic_tilt:       ["Pelvic Tilt", "Dead Bug", "Glute Bridge", "Bird Dog"],
+  kyphosis:          ["Kneeling Thoracic Spine Extension", "Sitting Thoracic Spine Flexion", "Seated Upright Twists", "Cat Cow Stretch"],
+};
+
+// ── Protocol plans (phased, premium) ──────────────────────────────────────
+// Phases 1-3 = structured 6-week program (weeks 1-2, 3-4, 5-6).
+// Phase 4 = ongoing Maintenance (week 7+) — rotating mix of best exercises.
+// Phase is calculated from protocol_start_date on the profile.
+
+const PROTOCOL_PLANS = {
+  desk_worker: {
+    1: [ // Foundation — weeks 1-2
+      ["360 Breathing", "Chin Tuck", "Sitting Neck Flexion Stretch", "Hip Flexor Stretch", "Bent Arm Chest Stretch"],
+      ["360 Breathing", "Forward Head Posture Hold", "Seated Upright Twists", "Shoulder Lateral Rotation", "Sitting Thoracic Spine Flexion"],
+    ],
+    2: [ // Activation — weeks 3-4
+      ["360 Breathing", "Wall Angels Standing", "Kneeling Thoracic Spine Extension", "Standing Scapular External Rotation", "Hip Flexor Stretch"],
+      ["360 Breathing", "Chin Tuck", "Bent Arm Chest Stretch", "Bird Dog", "Forward Head Posture Hold"],
+    ],
+    3: [ // Reinforcement — weeks 5-6
+      ["360 Breathing", "Wall Angels Standing", "Dead Bug", "Lying Floor Row Hold", "Seated Upright Twists"],
+      ["360 Breathing", "Standing Scapular External Rotation", "Side Plank", "Kneeling Thoracic Spine Extension", "Chin Tuck"],
+    ],
+    4: [ // Maintenance — week 7+
+      ["360 Breathing", "Chin Tuck", "Wall Angels Standing", "Hip Flexor Stretch", "Seated Upright Twists"],
+      ["360 Breathing", "Forward Head Posture Hold", "Standing Scapular External Rotation", "Kneeling Thoracic Spine Extension", "Bent Arm Chest Stretch"],
+      ["360 Breathing", "Chin Tuck", "Dead Bug", "Wall Angels Standing", "Sitting Neck Flexion Stretch"],
+    ],
+  },
+  low_back_pain: {
+    1: [ // Gentle Activation — weeks 1-2
+      ["360 Breathing", "Pelvic Tilt", "Cat Cow Stretch", "Hip Flexor Stretch", "Sitting Thoracic Spine Flexion"],
+      ["360 Breathing", "Pelvic Tilt", "Glute Bridge", "Seated Upright Twists", "Cat Cow Stretch"],
+    ],
+    2: [ // Stability — weeks 3-4
+      ["360 Breathing", "Dead Bug", "Glute Bridge", "Hip Flexor Stretch", "Cat Cow Stretch"],
+      ["360 Breathing", "Bird Dog", "Pelvic Tilt", "Holding Squat", "Sitting Thoracic Spine Flexion"],
+    ],
+    3: [ // Strength — weeks 5-6
+      ["360 Breathing", "Dead Bug", "Side Plank", "Single Leg Glute Bridge", "Glute Bridge"],
+      ["360 Breathing", "Bird Dog", "Holding Squat", "Single Leg Glute Bridge", "Pelvic Tilt"],
+    ],
+    4: [ // Maintenance — week 7+
+      ["360 Breathing", "Pelvic Tilt", "Bird Dog", "Glute Bridge", "Cat Cow Stretch"],
+      ["360 Breathing", "Dead Bug", "Hip Flexor Stretch", "Single Leg Glute Bridge", "Sitting Thoracic Spine Flexion"],
+      ["360 Breathing", "Bird Dog", "Pelvic Tilt", "Glute Bridge", "Holding Squat"],
+    ],
+  },
+};
+
+const PROTOCOL_PHASE_LABELS = {
+  desk_worker:   ["Foundation", "Activation", "Reinforcement", "Maintenance"],
+  low_back_pain: ["Gentle Activation", "Stability", "Strength", "Maintenance"],
+};
+
+function getProtocolPhase(startDateStr) {
+  if (!startDateStr) return 1;
+  const days = Math.floor((Date.now() - new Date(startDateStr)) / 86_400_000);
+  if (days < 14) return 1;
+  if (days < 28) return 2;
+  if (days < 42) return 3;
+  return 4; // Maintenance — week 7+
+}
+
+function applyFindingSwap(exercises, topFinding, level) {
+  if (!topFinding || !FINDING_TARGETS[topFinding]) return exercises;
+
+  const targets = FINDING_TARGETS[topFinding];
+  const alreadyCovered = exercises.some((ex) => targets.includes(ex.name));
+  if (alreadyCovered) return exercises;
+
+  // Swap in the first available targeted exercise at position 3.
+  const library    = buildExerciseLibrary();
+  const targetName = targets.find((name) => library[name]);
+  if (!targetName) return exercises;
+
+  const swapped = normalizeExercise(withLevel(library[targetName], level), 3);
+  const result  = [...exercises];
+  result[3]     = swapped;
+  return result;
+}
+
+function getPlanTemplate(planType, dayIndex, phase = 1) {
+  // Phased premium protocols
+  if (PROTOCOL_PLANS[planType]) {
+    const phaseData = PROTOCOL_PLANS[planType][phase] || PROTOCOL_PLANS[planType][1];
+    return phaseData[dayIndex % phaseData.length];
+  }
+  // Standard rotating plans
   const plans = {
     neck: [
       ["360 Breathing","Chin Tuck","Forward Head Posture Hold","Bent Arm Chest Stretch","Wall Angels Standing"],
@@ -268,9 +350,9 @@ function getPlanTemplate(planType, dayIndex) {
   return selected[dayIndex % selected.length];
 }
 
-function getExerciseObjects(planType, dayIndex, level, chairOnly) {
+function getExerciseObjects(planType, dayIndex, level, chairOnly, phase = 1) {
   const library = buildExerciseLibrary();
-  const names = chairOnly ? getChairOnlyPlan() : getPlanTemplate(planType, dayIndex);
+  const names   = chairOnly ? getChairOnlyPlan() : getPlanTemplate(planType, dayIndex, phase);
   return names.map((name, index) =>
     normalizeExercise(withLevel(library[name] || { name, category: "mobility" }, level), index)
   );
@@ -296,8 +378,10 @@ export default function Routine() {
   const [selectedExercise, setSelectedExercise] = useState(null);
   const [routineCompleted, setRoutineCompleted] = useState(false);
   const [earnedToday, setEarnedToday]           = useState(null);
-  const [showAdjuster, setShowAdjuster]         = useState(false);
-  const [chairOnlyToday, setChairOnlyToday]     = useState(false);
+  const [showAdjuster, setShowAdjuster]           = useState(false);
+  const [showProtocolSelect, setShowProtocolSelect] = useState(false);
+  const [showPaywall, setShowPaywall]             = useState(false);
+  const [chairOnlyToday, setChairOnlyToday]       = useState(false);
   const [todayKey, setTodayKey]                 = useState(getTodayKey());
   const [lockedDayIndex, setLockedDayIndex]     = useState(0);
 
@@ -359,18 +443,24 @@ export default function Routine() {
     return () => clearInterval(interval);
   }, [todayKey, profile]);
 
-  const streak         = profile?.current_streak || 0;
+  const streak         = profile?.current_streak  || 0;
   const dayIndex       = lockedDayIndex;
-  const planType       = profile?.plan_type      || "balanced";
-  const routineLevel   = profile?.routine_level  || "moderate";
+  const planType       = profile?.plan_type       || "balanced";
+  const routineLevel   = profile?.routine_level   || "moderate";
   const effectiveLevel = chairOnlyToday ? "easy" : routineLevel;
   const spineScore     = typeof profile?.spine_score === "number" ? profile.spine_score : 0;
   const spineLevel     = getSpineLevel(spineScore);
-  const nextThresh     = getNextLevelThreshold(spineScore);
+  const isPremium      = profile?.subscription_tier === "premium";
+  const spineAge = calcSpineAge(spineScore, profile?.age_range);
+  const protocolPhase  = getProtocolPhase(profile?.protocol_start_date);
+
+  // Free users can use any non-premium protocol; only phased (premium) ones are gated
+  const effectivePlanType = (!isPremium && PROTOCOL_PLANS[planType]) ? "balanced" : planType;
 
   const exercises = useMemo(() => {
-    return getExerciseObjects(planType, dayIndex, effectiveLevel, chairOnlyToday);
-  }, [planType, dayIndex, effectiveLevel, chairOnlyToday]);
+    const base = getExerciseObjects(effectivePlanType, dayIndex, effectiveLevel, chairOnlyToday, protocolPhase);
+    return applyFindingSwap(base, profile?.top_finding, effectiveLevel);
+  }, [effectivePlanType, dayIndex, effectiveLevel, chairOnlyToday, profile?.top_finding, protocolPhase]);
 
   const totalMins = Math.round(
     exercises.reduce((sum, ex) => sum + (ex.durationSecs || 0), 0) / 60
@@ -381,8 +471,11 @@ export default function Routine() {
     (e) => e.category === "strength" || e.category === "stability"
   ).length;
 
-  const todayFocus  = chairOnlyToday ? "Chair-only recovery day" : getTodayFocus(planType);
-  const progressMsg = getProgressMessage(streak);
+  const todayFocus  = chairOnlyToday ? "Chair-only recovery day" : getTodayFocus(effectivePlanType);
+
+  // Phase label for phased protocols
+  const phaseLabels   = PROTOCOL_PHASE_LABELS[effectivePlanType];
+  const phaseLabel    = phaseLabels ? phaseLabels[protocolPhase - 1] : null;
 
   const handleTooEasy = async () => {
     if (!user?.id || !profile) return;
@@ -410,33 +503,61 @@ export default function Routine() {
 
   const handleChairOnly = () => setChairOnlyToday(true);
 
+  const handleProtocolSelect = async (newPlanType) => {
+    if (!user?.id) return;
+    try {
+      const isPhased = !!PROTOCOL_PLANS[newPlanType];
+      const { data, error } = await supabase.from("profiles")
+        .update({
+          plan_type:             newPlanType,
+          // Reset start date when switching into a phased protocol
+          ...(isPhased ? { protocol_start_date: new Date().toISOString().split("T")[0] } : {}),
+          updated_at:            new Date().toISOString(),
+        })
+        .eq("id", user.id)
+        .select()
+        .single();
+      if (error) throw error;
+      setProfile(data);
+      setShowProtocolSelect(false);
+    } catch (err) {
+      console.error("[Routine] protocol select error:", err);
+    }
+  };
+
   const handleWorkoutComplete = async () => {
     if (routineCompleted) return null;
     if (!user?.id || !profile) return null;
 
     try {
-      const previousConsistency = Number(profile?.consistency_score ?? 50);
       const structuralScore     = Number(profile?.structural_score  ?? 50);
       const previousMobility    = Number(profile?.mobility_score    ?? 50);
       const previousStrength    = Number(profile?.strength_score    ?? 50);
       const previousSpineScore  = Number(profile?.spine_score       ?? 0);
 
+      // Effort = real minutes exercised this week, not a flat per-day bump.
+      // getActiveWeeklyMinutes already rolls over to 0 if the last completion
+      // fell in a previous week, so no separate reset step is needed here.
+      const previousWeeklyMinutes = getActiveWeeklyMinutes(profile);
+      const previousEffortPercent = getEffortPercent(previousWeeklyMinutes);
+
       const snapshot = {
-        spineScore:       previousSpineScore,
-        mobilityScore:    previousMobility,
-        strengthScore:    previousStrength,
-        consistencyScore: previousConsistency,
+        spineScore:    previousSpineScore,
+        mobilityScore: previousMobility,
+        strengthScore: previousStrength,
+        effortScore:   previousEffortPercent,
       };
 
-      const newConsistency = Math.min(100, previousConsistency + 2);
-      const newMobility    = Math.min(100, previousMobility + mobilityCount * 0.8);
-      const newStrength    = Math.min(100, previousStrength + strengthCount * 0.8);
+      const newWeeklyMinutes = previousWeeklyMinutes + totalMins;
+      const newEffortPercent = getEffortPercent(newWeeklyMinutes);
+      const newMobility      = Math.min(100, previousMobility + mobilityCount * 0.8);
+      const newStrength      = Math.min(100, previousStrength + strengthCount * 0.8);
 
       const rawSpineScore = Math.round(
         structuralScore * 0.4 +
-        newConsistency  * 0.2 +
-        newMobility     * 0.2 +
-        newStrength     * 0.2
+        newEffortPercent * 0.2 +
+        newMobility      * 0.2 +
+        newStrength      * 0.2
       );
 
       const newSpineScore = previousSpineScore >= 100
@@ -450,13 +571,16 @@ export default function Routine() {
 
       const { data, error } = await supabase.from("profiles")
         .update({
-          consistency_score: Math.round(newConsistency),
+          // NOTE: still the `consistency_score` column (no migration), but it
+          // now stores raw minutes exercised this week, not a 0-100 score.
+          consistency_score: Math.round(newWeeklyMinutes),
           mobility_score:    Math.round(newMobility),
           strength_score:    Math.round(newStrength),
           spine_score:       newSpineScore,
           current_streak:    newStreak,
           longest_streak:    newLongestStreak,
           routine_level:     nextLevel,
+          last_active_date:  new Date().toISOString().split("T")[0],
           updated_at:        new Date().toISOString(),
         })
         .eq("id", user.id).select().single();
@@ -474,11 +598,12 @@ export default function Routine() {
       return {
         scoreSnapshot: snapshot,
         newScores: {
-          spineScore:       newSpineScore,
-          mobilityScore:    Math.round(newMobility),
-          strengthScore:    Math.round(newStrength),
-          consistencyScore: Math.round(newConsistency),
-          currentStreak:    newStreak,
+          spineScore:      newSpineScore,
+          mobilityScore:   Math.round(newMobility),
+          strengthScore:   Math.round(newStrength),
+          effortScore:     Math.round(newEffortPercent),
+          effortMinutes:   Math.round(newWeeklyMinutes),
+          currentStreak:   newStreak,
         },
       };
     } catch (err) {
@@ -514,6 +639,7 @@ export default function Routine() {
         exercises={exercises}
         dayOfPlan={dayIndex + 1}
         streak={streak}
+        spineAge={spineAge}
         mobilityCount={mobilityCount}
         strengthCount={strengthCount}
         onComplete={handleWorkoutComplete}
@@ -526,8 +652,22 @@ export default function Routine() {
     );
   }
 
+  // Paywall shown full-screen
+  if (showPaywall) {
+    return (
+      <PaywallScreen
+        source="protocol"
+        onClose={() => setShowPaywall(false)}
+        onUpgrade={() => {
+          // RevenueCat purchase flow wired here later
+          setShowPaywall(false);
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="px-4 pt-8 pb-28 max-w-lg mx-auto">
+    <div className="px-4 pt-4 pb-28 max-w-lg mx-auto">
       <DailyAdjustSheet
         open={showAdjuster}
         onClose={() => setShowAdjuster(false)}
@@ -537,102 +677,81 @@ export default function Routine() {
         currentLevel={routineLevel}
       />
 
+      <ProtocolSelectSheet
+        open={showProtocolSelect}
+        onClose={() => setShowProtocolSelect(false)}
+        currentPlanType={effectivePlanType}
+        isPremium={isPremium}
+        currentPhase={protocolPhase}
+        onSelect={handleProtocolSelect}
+        onUpgrade={() => { setShowProtocolSelect(false); setShowPaywall(true); }}
+      />
+
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary mb-1.5">
               SpineLab Daily
             </p>
             <h1 className="text-3xl font-bold tracking-tight leading-tight">Today's Routine</h1>
+            <p className="text-sm text-muted-foreground mt-1.5">
+              ~{totalMins} min · {exercises.length} moves
+            </p>
+
+            {/* Tappable plan chip */}
+            <button
+              onClick={() => setShowProtocolSelect(true)}
+              className="flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-xl bg-secondary border border-border active:scale-95 transition-transform"
+            >
+              <span className="text-xs font-semibold text-foreground/70">{todayFocus}</span>
+              {phaseLabel && (
+                <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-lg">
+                  {phaseLabel}
+                </span>
+              )}
+              {!isPremium && (
+                <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">· Upgrade for more</span>
+              )}
+              <ChevronRight className="w-3 h-3 text-muted-foreground/50 ml-auto" />
+            </button>
           </div>
+
           <button
             onClick={() => setShowAdjuster(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors shrink-0"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors shrink-0 mt-1"
           >
             <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
             <span className="text-xs font-semibold text-muted-foreground">Adjust</span>
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <span className="text-xs font-semibold bg-secondary text-foreground/70 px-2.5 py-1 rounded-xl border border-border capitalize">
-            {chairOnlyToday ? "chair only" : routineLevel}
-          </span>
-          <span className="text-xs font-semibold bg-secondary text-foreground/70 px-2.5 py-1 rounded-xl border border-border capitalize">
-            {planType.replace("_", " ")}
-          </span>
-          {streak > 0 && (
-            <span className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1 rounded-xl border border-primary/10">
-              <Flame className="w-3 h-3" />
-              {streak} day streak
-            </span>
-          )}
-          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-xl border ${spineLevel.bg} ${spineLevel.color}`}>
-            <Zap className="w-3 h-3" />
-            {spineLevel.title}
-          </span>
-        </div>
-
-        <div className="rounded-[28px] border border-border bg-card p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold mb-1">Today's focus</p>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {todayFocus}. Each session moves your Spine Score closer to the next level.
+        {/* Start button — top, prominent */}
+        {routineCompleted ? (
+          <div className="bg-primary/10 rounded-3xl p-5 text-center border border-primary/10">
+            <Check className="w-7 h-7 text-primary mx-auto mb-2" />
+            <p className="font-semibold text-base">Today's routine done!</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Great work. Come back tomorrow to keep building.
+            </p>
+            {earnedToday && earnedToday.spineScore > earnedToday.prevSpineScore && (
+              <p className="text-sm font-semibold mt-3" style={{ color: spineLevel.ring }}>
+                Spine Score: {earnedToday.prevSpineScore} → {earnedToday.spineScore}
               </p>
-            </div>
-            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
-              <Sparkles className="w-5 h-5 text-primary" />
-            </div>
+            )}
           </div>
-
-          <div className="grid grid-cols-3 gap-2 mt-4">
-            <div className="rounded-2xl bg-secondary/70 px-3 py-3">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Time</p>
-              <p className="text-sm font-bold">~{totalMins} min</p>
-            </div>
-            <div className="rounded-2xl bg-secondary/70 px-3 py-3">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Moves</p>
-              <p className="text-sm font-bold">{exercises.length}</p>
-            </div>
-            <div className="rounded-2xl bg-secondary/70 px-3 py-3">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Level</p>
-              <p className="text-sm font-bold" style={{ color: spineLevel.ring }}>{spineLevel.title}</p>
-            </div>
-          </div>
-
-          {nextThresh && (
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Progress to {getSpineLevel(nextThresh).title}
-                </p>
-                <p className="text-[10px] text-muted-foreground">{nextThresh - spineScore} pts to go</p>
-              </div>
-              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    backgroundColor: spineLevel.ring,
-                    width: `${Math.min(100, Math.max(0, Math.round(
-                      ((spineScore - ([0,40,55,70,85,100][spineLevel.level - 1] || 0)) /
-                       (nextThresh   - ([0,40,55,70,85,100][spineLevel.level - 1] || 0))) * 100
-                    )))}%`,
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {progressMsg && (
-            <div className="mt-4 flex items-start gap-2.5 rounded-2xl bg-primary/5 border border-primary/10 px-3 py-3">
-              <Trophy className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-              <p className="text-sm text-foreground/85">{progressMsg}</p>
-            </div>
-          )}
-        </div>
+        ) : (
+          <Button
+            onClick={() => setSessionActive(true)}
+            className="w-full h-14 rounded-2xl text-base font-bold gap-3 shadow-md shadow-primary/20"
+            disabled={exercises.length === 0}
+          >
+            <Play className="w-5 h-5" />
+            Start Today's Routine
+          </Button>
+        )}
       </motion.div>
 
+      {/* Exercise preview list — not tappable, just a preview of what's in the session */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -640,10 +759,9 @@ export default function Routine() {
         className="space-y-3 mb-6"
       >
         {exercises.map((ex, i) => (
-          <button
+          <div
             key={ex.id}
-            onClick={() => setSelectedExercise(ex)}
-            className="w-full rounded-[26px] border border-border bg-card px-4 py-3.5 text-left hover:bg-secondary/40 active:scale-[0.995] transition-all"
+            className="w-full rounded-[26px] border border-border bg-card px-4 py-3.5"
           >
             <div className="flex items-center gap-3">
               <div className="w-16 h-16 shrink-0 rounded-2xl overflow-hidden border border-border bg-white dark:bg-slate-950">
@@ -659,11 +777,6 @@ export default function Routine() {
                   }`}>
                     {CATEGORY_LABELS[ex.category] || ex.category}
                   </span>
-                  {i === 0 && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-sky-100 text-sky-700 border-sky-200">
-                      Start here
-                    </span>
-                  )}
                 </div>
                 <p className="text-[15px] font-semibold leading-snug">{ex.name}</p>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -672,48 +785,13 @@ export default function Routine() {
               </div>
               <div className="text-right shrink-0">
                 <p className="text-xs font-semibold text-foreground/80">{formatDuration(ex.durationSecs)}</p>
-                <ChevronRight className="w-4 h-4 text-muted-foreground/50 ml-auto mt-1.5" />
               </div>
             </div>
-          </button>
+          </div>
         ))}
       </motion.div>
 
       <MedicalDisclaimer className="mb-5" />
-
-      {!showAdjuster && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18 }}
-          className="sticky bottom-0 bg-background/95 backdrop-blur-sm pt-3"
-          style={{ paddingBottom: `max(10px, env(safe-area-inset-bottom, 10px))` }}
-        >
-          {routineCompleted ? (
-            <div className="bg-primary/10 rounded-3xl p-6 text-center border border-primary/10">
-              <Check className="w-8 h-8 text-primary mx-auto mb-2" />
-              <p className="font-semibold text-base">Today's routine done!</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Great work. Come back tomorrow to keep building.
-              </p>
-              {earnedToday && earnedToday.spineScore > earnedToday.prevSpineScore && (
-                <p className="text-sm font-semibold mt-3" style={{ color: spineLevel.ring }}>
-                  Spine Score: {earnedToday.prevSpineScore} → {earnedToday.spineScore}
-                </p>
-              )}
-            </div>
-          ) : (
-            <Button
-              onClick={() => setSessionActive(true)}
-              className="w-full h-16 rounded-2xl text-base font-bold gap-3 shadow-lg"
-              disabled={exercises.length === 0}
-            >
-              <Play className="w-5 h-5" />
-              Start Today's Routine
-            </Button>
-          )}
-        </motion.div>
-      )}
     </div>
   );
 }

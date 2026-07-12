@@ -4,17 +4,23 @@ import { Button } from "@/components/ui/button";
 import { X, Loader2 } from "lucide-react";
 import ExerciseTimer from "./ExerciseTimer";
 import CompletionCelebration from "./CompletionCelebration";
+import { useWakeLock } from "@/lib/useWakeLock";
 
 export default function WorkoutSession({
   exercises = [],
   dayOfPlan,
   streak,
+  spineAge,
   mobilityCount,
   strengthCount,
   onComplete,
   onReturnDashboard,
   onExit,
 }) {
+  // Keep the screen awake for the entire workout session.
+  // Releases automatically when this component unmounts.
+  useWakeLock();
+
   const [currentIndex, setCurrentIndex]       = useState(0);
   const [completedCount, setCompletedCount]   = useState(0);
   const [savingCompletion, setSavingCompletion] = useState(false);
@@ -68,6 +74,7 @@ export default function WorkoutSession({
       <CompletionCelebration
         dayOfPlan={dayOfPlan}
         streak={streak}
+        spineAge={spineAge}
         scoreSnapshot={completionResult.scoreSnapshot}
         newScores={completionResult.newScores}
         exerciseCount={exercises.length}

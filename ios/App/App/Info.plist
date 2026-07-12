@@ -14,6 +14,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>SpineLab uses your camera to scan posture and provide posture feedback.</string>
 
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SpineLab may save posture scan images to your photo library.</string>
+
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 

@@ -198,7 +198,37 @@ export function calculateSpineScore(answers, postureFindings = []) {
   return calculateStructuralBaseline(answers, postureFindings);
 }
 
-// ── Consistency score ────────────────────────────────────────────────────────
+// ── Spine age ("Spine of a X-year-old") ──────────────────────────────────────
+//
+// This is the single source of truth for turning a profile's onboarding
+// age_range answer (e.g. "55plus", "40to55") into a midpoint age, and then
+// into a spine age relative to the current Spine Score. It used to be
+// duplicated (in sync) across Dashboard.jsx, Onboarding.jsx, and Progress.jsx,
+// while PostureScan.jsx and Routine.jsx separately used a hardcoded lookup
+// table whose keys ("55-64", "65+", ...) never matched the real saved values
+// — silently falling back to a default midpoint of 35 for every user. All
+// five call sites should now import from here instead of redefining this.
+export function getAgeRangeMidpoint(ageRange) {
+  if (!ageRange) return 35;
+  const key = ageRange.toLowerCase().replace(/\s+/g, "").trim();
+  const matchTo = key.match(/(\d+)to(\d+)/);
+  if (matchTo) return Math.round((parseInt(matchTo[1]) + parseInt(matchTo[2])) / 2);
+  const matchDash = key.match(/(\d+)-(\d+)/);
+  if (matchDash) return Math.round((parseInt(matchDash[1]) + parseInt(matchDash[2])) / 2);
+  const matchPlus = key.match(/(\d+)(?:plus|\+)/);
+  if (matchPlus) return parseInt(matchPlus[1]) + 7;
+  const matchUnder = key.match(/under(\d+)/);
+  if (matchUnder) return parseInt(matchUnder[1]) - 5;
+  return 35;
+}
+
+export function calcSpineAge(spineScore, ageRange) {
+  const midAge = getAgeRangeMidpoint(ageRange);
+  const raw = midAge - Math.floor((spineScore - 50) / 5);
+  return Math.max(18, Math.min(midAge + 10, raw));
+}
+
+// ── Consistency score (legacy, kept only for the one-time onboarding blend) ──
 export function getInitialConsistencyScore() {
   return 50;
 }
@@ -217,6 +247,46 @@ export function applyStreakBonus(consistencyScore = 50, streak = 0) {
   else if (streak >= 3) bonus = 3;
 
   return clamp(consistencyScore + bonus, 0, 100);
+}
+
+// ── Effort score (replaces Consistency in the live dashboard breakdown) ─────
+//
+// IMPORTANT: this is persisted in the legacy `consistency_score` profile
+// column to avoid a database migration. As of this change that column no
+// longer holds a 0–100 score — it holds RAW MINUTES exercised so far in the
+// current week (Mon–Sun). Always run it through getEffortPercent() before
+// displaying it or blending it into the Spine Score.
+export const WEEKLY_EFFORT_GOAL_MINUTES = 30;
+
+function getWeekStartKey(dateInput) {
+  const d = new Date(dateInput);
+  if (Number.isNaN(d.getTime())) return null;
+  const day = d.getDay(); // 0 = Sunday
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - diffToMonday);
+  return d.toISOString().split("T")[0];
+}
+
+export function isSameEffortWeek(dateA, dateB) {
+  const a = getWeekStartKey(dateA);
+  const b = getWeekStartKey(dateB);
+  return Boolean(a) && Boolean(b) && a === b;
+}
+
+// How many minutes has this user actually exercised so far in the current
+// week, given their stored profile? Rolls over to 0 automatically once a
+// completion lands in a new week — no separate "reset" step required.
+export function getActiveWeeklyMinutes(profile = {}, now = new Date()) {
+  const stored = Number(profile?.consistency_score ?? 0);
+  const lastActive = profile?.last_active_date;
+  if (!lastActive || !isSameEffortWeek(lastActive, now)) return 0;
+  return Math.max(0, stored);
+}
+
+// Convert raw weekly minutes into the 0–100 scale the rest of the UI expects.
+export function getEffortPercent(minutes = 0) {
+  return clamp((Number(minutes) || 0) / WEEKLY_EFFORT_GOAL_MINUTES * 100, 0, 100);
 }
 
 // ── Structural score updates from scans ──────────────────────────────────────

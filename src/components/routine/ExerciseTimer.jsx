@@ -357,8 +357,8 @@ export default function ExerciseTimer({
           />
         </div>
 
-        {/* Counter + category pill */}
-        <div className="flex items-center justify-between mb-2">
+        {/* Counter + category pill — pill sits beside counter so the fixed X button doesn't overlap */}
+        <div className="flex items-center gap-2 mb-2 pr-14">
           <span className="text-xs font-semibold text-muted-foreground">
             {exerciseIndex + 1} / {totalExercises}
           </span>

@@ -16,4 +16,10 @@ export default defineConfig({
   server: {
     host: true,
   },
+
+  build: {
+    rollupOptions: {
+      external: ["@perfood/capacitor-healthkit"],
+    },
+  },
 });
